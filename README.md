@@ -1,2 +1,3 @@
 # mbare
-Gaetano's project 
+Gaetano's project
+- Remember to git pull every day! 
