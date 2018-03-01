@@ -12,6 +12,27 @@ import sisl as si
 from numbers import Integral
 from sisl._help import ensure_array
 
+def dagger(M):
+    return np.conjugate(np.transpose(M))
+
+def displaySparse(m, filename, dpi=300):
+    if not isinstance(m, sp.sparse.coo_matrix):
+        m = sp.sparse.coo_matrix(m)
+    fig = figure()
+    ax = fig.add_subplot(111, axisbg='black')
+    ax.plot(m.col, m.row, 's', color='white', ms=10)
+    ax.set_xlim(0, m.shape[1])
+    ax.set_ylim(0, m.shape[0])
+    ax.set_aspect('equal')
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.invert_yaxis()
+    ax.set_aspect('equal')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    savefig(filename, facecolor='black', edgecolor='black', dpi=dpi)
+    return ax
+
 def get_potential(TSHS, iio):
     """
     iio:    index (0-based) of orbital in basis set (i.e., pz in SZP: iio = 2)
@@ -650,6 +671,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
     # Center of shape in TSHS 
     if center is None:
         center = TSHS.center(atom=(TSHS.xyz[:,2] == z_graphene).nonzero()[0])
+        print('Setting Delta around this center: {}'.format(center))
     # Thickness in Ang
     if thickness is None:
         thickness = 6. # Ang
@@ -795,7 +817,7 @@ def makeTB(TSHS_0, pzidx, nn, WW, LL, elec=None, save=True, return_bands=False):
     return HS_dev
 
 
-def makeTB_FrameOutside(tshs, tbt, xyz_tip, TSHS_0, pzidx, nn, WW, LL, 
+def makeTB_FrameOutside(tshs, tbt, center, TSHS_0, pzidx, nn, WW, LL, 
     elec=None, save=True, return_bands=False, z_graphene=None):
     """
     tshs:           TSHS object from "dirty graphene" calculation
@@ -818,6 +840,7 @@ def makeTB_FrameOutside(tshs, tbt, xyz_tip, TSHS_0, pzidx, nn, WW, LL,
             print('ERROR: cannot build TB model because the provided geometry\n\tis not a pristine graphene')
             exit(1)
 
+
     # Extracting only pz-projected parameters from TSHS of perfect graphene
     r, param = get_dft_param(TSHS_0, 0, pzidx, pzidx, unique=True, onlynnz=True)
     print('\nEffective no. of neighbors per atom from TSHS_0: {}'.format(len(r)-1))
@@ -836,13 +859,17 @@ def makeTB_FrameOutside(tshs, tbt, xyz_tip, TSHS_0, pzidx, nn, WW, LL,
     for ri, ci, oi in zip(ref_r, ref_hop, ref_over):
         print('{:.5f} \t '.format(ri), ci, oi)
 
-    # R and hopping from tshs, xyz_tip is the coordinates of the tip apex
+    # R and hopping from tshs, center is the coordinates of the tip apex
     # This works Only if the frame is the outmost atoms in tbt.a_dev
     # Maybe it's better to define a shape here!
-    if z_graphene == None:
-        tshs_dev = tshs.sub(tbt.a_dev)
-        z_graphene = tshs_dev.xyz[0, 2]
-    distances, hop = get_R_hop(tshs, tbt, xyz_tip, pzidx, nn, z_gr=z_graphene)
+    if z_graphene is None:
+        print('\n\nPlease provide a value for z_graphene')
+        exit(1)
+    if center is None:
+        center = tshs.center(atom=(tshs.xyz[:,2] == z_graphene).nonzero()[0])
+        print('makeTB: you are considering this as center: {}'.format(center))
+
+    distances, hop = get_R_hop(tshs, tbt, center, pzidx, nn, z_gr=z_graphene)
     hop_atframe = [np.average(hop[i, np.arange(-10, 0)]) for i in range(nn+1)]
     # r's to plot
     r2plot = np.linspace(0, np.amax(distances), 1000)
@@ -1706,7 +1733,7 @@ def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  k='avg', avg=True, scale='ra
         print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))
     else:
         axcb = plt.colorbar(image, cax=cax, format='%f', ticks=[vmin/np.amax(bc_list), vmax/np.amax(bc_list)])
-        if percent:
+        if scale is '%':
             vmin, vmax = vmin*100/max_newbc_bg, vmax*100/max_newbc_bg
             axcb.ax.set_yticklabels(['{:.1f} %'.format(vmin), '{:.1f} %'.format(vmax)])
             print('MIN bc among selected atoms (in final plot) = {:.1f} %'.format(vmin))
