@@ -1,6 +1,6 @@
 from __future__ import print_function, division
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import numpy as np
 import scipy as sp
 from operator import truediv
@@ -10,7 +10,6 @@ import matplotlib.cm as cm
 from itertools import groupby
 import sisl as si
 from numbers import Integral
-from sisl._help import ensure_array
 
 def dagger(M):
     return np.conjugate(np.transpose(M))
@@ -676,7 +675,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
     if thickness is None:
         thickness = 6. # Ang
         #thickness = HS_TB.maxR()+0.01
-    thickness = ensure_array(thickness, np.float64)
+    thickness = np.asarray(thickness, np.float64)
     # Cuboid or Ellissoid?
     size = .5*np.diagonal(TSHS.cell) + [0,0,300] # default radius is half the cell size
     if shape == 'Ellipsoid' or shape == 'Sphere':
@@ -687,7 +686,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
         size *= 2
         thickness *= 2
         if ext_offset is not None:
-            ext_offset = ensure_array(ext_offset, np.float64)
+            ext_offset = np.asarray(ext_offset, np.float64)
             ext_offset *= 2
     else:
         print('\n shape = "{}" is not implemented...'.format(shape))
@@ -696,7 +695,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
     area_ext = mkshape(size, center=center)
     # Adjust with ext_offset if necessary
     if ext_offset is not None:
-        ext_offset = ensure_array(ext_offset, np.float64)
+        ext_offset = np.asarray(ext_offset, np.float64)
         area_ext = area_ext.expand(-ext_offset)
         # Force it to be Cube or Sphere (side = ext_offset) if necessary
         if shape == 'Sphere' or shape == 'Cube':
@@ -1601,7 +1600,7 @@ class Groupby:
 
         return result
 
-def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  k='avg', avg=True, scale='raw', xyz_origin=None,
+def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  zaxis=2, k='avg', avg=True, scale='raw', xyz_origin=None,
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
     lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None):   
     """ 
@@ -1653,6 +1652,13 @@ def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  k='avg', avg=True, scale='ra
     else:
         norm=None
 
+    if zaxis == 2:
+        xaxis, yaxis = 0, 1
+    elif zaxis == 0:
+        xaxis, yaxis = 1, 2
+    elif zaxis == 1:
+        xaxis, yaxis = 0, 2
+
     if avg:
         # Plot bond currents as avg 2D map
         isort = np.argsort(i_list)
@@ -1661,14 +1667,19 @@ def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  k='avg', avg=True, scale='ra
         iu, iu_i, iu_c = np.unique(i_s, return_index=True, return_counts=True)
         
         # The two definitions below are equivalent and super fast
-        bc_avg = np.array([np.average(bc_s[a:(a+b)]) for a, b in zip(iu_i, iu_c)])
+        bc_avg = np.array([np.sum(bc_s[a:(a+b)]) for a, b in zip(iu_i, iu_c)])
+        #bc_avg = Groupby(i_s).apply(np.average, bc_s, broadcast=True)[iu_i]
+        # Below is average rater than sum. 
+        # These give similar results for large systems, but sum is better.
+        # Check article/thesis
+        #bc_avg = np.array([np.average(bc_s[a:(a+b)]) for a, b in zip(iu_i, iu_c)])
         #bc_avg = Groupby(i_s).apply(np.average, bc_s, broadcast=True)[iu_i]
 
         if scale is 'radial':
             _, r = geom.close_sc(xyz_origin, R=np.inf, idx=iu, ret_rij=True)
             bc_avg = np.multiply(bc_avg, r)
 
-        x, y = geom.xyz[iu, 0], geom.xyz[iu, 1]
+        x, y = geom.xyz[iu, xaxis], geom.xyz[iu, yaxis]
 
         if scale is '%':
             if vmin is None:
@@ -1696,9 +1707,9 @@ def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  k='avg', avg=True, scale='ra
         if vmax is None:
             vmax = np.max(bc_list)
         # Plot bond currents as half-segments
-        start_list = zip(geom.xyz[i_list, 0], geom.xyz[i_list, 1])
-        half_end_list = zip(.5*(geom.xyz[i_list, 0]+geom.xyz[j_list, 0]), 
-            .5*(geom.xyz[i_list, 1]+geom.xyz[j_list, 1]))
+        start_list = zip(geom.xyz[i_list, xaxis], geom.xyz[i_list, yaxis])
+        half_end_list = zip(.5*(geom.xyz[i_list, xaxis]+geom.xyz[j_list, xaxis]), 
+            .5*(geom.xyz[i_list, yaxis]+geom.xyz[j_list, yaxis]))
         line_list = list(map(list, zip(start_list, half_end_list)))     # segments length = 1/2 bonds length
         linewidths = lw * bc_list / np.max(bc_list)     
         lattice_bonds = collections.LineCollection(line_list, 
@@ -1709,7 +1720,7 @@ def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  k='avg', avg=True, scale='ra
         image = lattice_bonds
     
     if lattice:
-        x, y = geom.xyz[atoms, 0], geom.xyz[atoms, 1]
+        x, y = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
         ax.scatter(x, y, s=ps*2, marker='o', facecolors='None', linewidth=0.8, edgecolors='k')
 
     ax.autoscale()
