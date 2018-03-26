@@ -1602,7 +1602,7 @@ class Groupby:
 
 def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  zaxis=2, k='avg', avg=True, scale='raw', xyz_origin=None,
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
-    lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None):   
+    lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, spsite=None):   
     """ 
     atoms must be 0-based
     """
@@ -1722,6 +1722,10 @@ def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  zaxis=2, k='avg', avg=True, 
     if lattice:
         x, y = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
         ax.scatter(x, y, s=ps*2, marker='o', facecolors='None', linewidth=0.8, edgecolors='k')
+
+    if spsite is not None:
+        xs, ys = geom.xyz[spsite, xaxis], geom.xyz[spsite, yaxis]
+        ax.scatter(xs, ys, s=ps*2, marker='x', color='red')
 
     ax.autoscale()
     ax.margins(0.)

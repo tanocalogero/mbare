@@ -51,24 +51,31 @@ def rearrange(HS, list, where='end'):
         list_new = np.arange(HS.na-len(list), HS.na)
     return list_new, HS_new
 
-def map_xyz(A, B, center_B, area_Delta, area_int_for_buffer=None):
+def map_xyz(A, B, area_Delta, center_B=None, pos_B=None, area_int_for_buffer=None):
     ### FRAME
     print('Mapping from DELTA in DFT geometry to THETA in host geometry')
     # Recover atoms in Delta region of model A
     a_Delta = area_Delta.within_index(A.xyz)
     # Find the set Theta of unique corresponding atoms in model B 
-    if center_B is None:
-        center_B = B.center(what='xyz')
     area_Theta = area_Delta.copy()
-    #shift = [sc_xyz_shift(B, 0), 2*sc_xyz_shift(B, 1), 0.]
-    shift = [0.,0.,0.]
-    vector = center_B -shift - area_Theta.center
-    B_translated = B.translate(-vector) 
-    a_Theta = area_Theta.within_index(B_translated.xyz)
+
+    if pos_B is not None:
+        vector = pos_B
+        B_translated = B.translate(-vector) 
+    else: 
+        if center_B is None: 
+            center_B = B.center(what='xyz')
+        #shift = [sc_xyz_shift(B, 0), 2*sc_xyz_shift(B, 1), 0.]
+        shift = [0.,0.,0.]
+        vector = center_B -shift -area_Theta.center
+        B_translated = B.translate(-vector) 
     
+    a_Theta = area_Theta.within_index(B_translated.xyz)
+
     if len(a_Delta) != len(a_Theta):
         print('len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
         print('You should try to fiddle around in the script with the translation of model B...')
+        print('   Check a_Theta_not_matching.xyz')
         v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
         exit(1)
 
@@ -87,6 +94,7 @@ def map_xyz(A, B, center_B, area_Delta, area_int_for_buffer=None):
         v = B.geom.copy(); v.atom[a_Theta] = a8; v.write('tmp_tb.xyz')
         exit(1)
 
+
     # WARNING: we are about to rearrange the atoms in the host geometry!!!
     a_Theta_rearranged, new_B = rearrange(B, a_Theta, where='end')
     print("\nSelected atoms mapped into host geometry, after rearrangement\n\
@@ -97,7 +105,8 @@ at the end of the coordinates list (1-based): {}\n{}".format(len(a_Theta_rearran
         ### FRAME
         # NB: that cuboids are always independent from the sorting in the host geometry
         area_int_B = area_int_for_buffer.copy()
-        area_int_B.set_center(center_B-shift)
+        if center_B is not None:
+            area_int_B.set_center(center_B-shift)
         buffer = area_int_B.within_index(new_B.xyz)
         # Write buffer atoms fdf block
         print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(buffer), list2range_TBTblock(buffer)))
@@ -332,7 +341,8 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT, 
-    HS_host, pzidx=None, pos_dSE=0, TSHS_elec=None, dx=None, dy=None, TBTSE=None, spin=0):
+    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
+    TBTSE=None, spin=0):
     """
     TSHS:                   TSHS from unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
@@ -405,7 +415,8 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     # Map a_inner into host geometry (which includes electrodes!)
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
-    a_dSE_host, new_HS_host = map_xyz(TSHS, a_inner, HS_host, ixyz_0=pos_dSE, dx=dx, dy=dy, TSHS_elec=TSHS_elec)
+    a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, pos_B=pos_dSE, 
+        area_Delta=area_Delta, area_int_for_buffer=area_int)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('inside_a_dSE_host.xyz')
     
     # Write final host model (same as TSHS, but
@@ -415,22 +426,23 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     new_HS_host.geom.write('inside_HS_DEV.fdf')
     new_HS_host.write('inside_HS_DEV.nc')
 
-
     # Energy grid
-    Eindices = [TBT.Eindex(en) for en in energies]
+    if isinstance(energies[0], int):
+        Eindices = list(energies)
+    else:
+        Eindices = [TBT.Eindex(en) for en in energies]
     E = TBT.E[Eindices] + 1j*eta_value
     
     
-    ##### Setup dSE
-    print('Initializing dSE file...')
-    o_dSE_host = new_HS_host.a2o(a_dSE_host, all=True).reshape(-1, 1)  # this has to be wrt L+D+R host geometry
-    dSE = si.get_sile('inside_SE_i.delta.nc', 'w')
-
-
     ############## initial TSHS w/o periodic boundary conditions
     print('Removing periodic boundary conditions')
     TSHS_n = TSHS.copy()
     TSHS_n.set_nsc([1]*3)
+
+    ##### Setup dSE
+    print('Initializing dSE file...')
+    o_dSE_host = new_HS_host.a2o(a_dSE_host, all=True).reshape(-1, 1)  # this has to be wrt L+D+R host geometry
+    dSE = si.get_sile('inside_SE_i.delta.nc', 'w')
 
     ##### Setup TBTGF
     print('Initializing TBTGF files...')
@@ -478,8 +490,13 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
         pv_R = TBTSE.pivot('Right', in_device=True, sort=True).reshape(-1, 1)
         #pv_R_inner = np.in1d(o_inner, pv_R.reshape(-1, )).nonzero()[0].reshape(-1, 1)
 
-    print('Computing and storing Sigma in TBTGF and dSE format...')
+    if (TBT.kpt < 0.).any():
+        print('Time reversal symmetry in TBTrans was off. To speed up we restore it')
+        mp = si.MonkhorstPack(TSHS.geom, [TBT.nkpt, 1, 1])
+    else:
+        mp = si.MonkhorstPack(TSHS.geom, [TBT.nkpt, 1, 1], trs=False)
 
+    print('Computing and storing Sigma in TBTGF and dSE format...')
     ################## Loop over E
     for i, (HS4GF, _, e) in enumerate(GF):
         print('Doing E = {} eV'.format(e.real))  # Only for 1 kpt 
@@ -487,8 +504,9 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
         Gssum_d = np.zeros((len(o_dev), len(o_dev)), np.complex128)
         
         ################## Loop over transverse k-points and average
-        for ikpt, (kpt, wkpt) in enumerate(zip(TBT.kpt, TBT.wkpt)):        
-            print('Doing kpt # {} of {}  {}'.format(ikpt+1, len(TBT.kpt), kpt))
+        #for ikpt, (kpt, wkpt) in enumerate(zip(TBT.kpt, TBT.wkpt)):        
+        for ikpt, (kpt, wkpt) in enumerate(zip(mp.k, mp.weight)):        
+            print('Doing kpt # {} of {}  {}'.format(ikpt+1, len(mp.k), kpt))
             # Read H and S from full TSHS (L+D+R) - no self-energies here!
             if TSHS_n.spin.is_polarized:
                 Hfullk = TSHS.Hk(kpt, format='array', spin=spin)
