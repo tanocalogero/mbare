@@ -69,4 +69,4 @@ Ens = [0.792]
 eta = 0.001   # In eV. In principle it oculd be different for ZOOM IN and ZOOM OUT
 # Create SE file to be read in tbtrans
 out2in_frame(TSHS_0, a_Delta, eta, Ens, TBTSE_0, 
-    TSHS, pos_dSE=TSHS_0.xyz[72], area_Delta=Delta, TBTSE=TBTSE_0)      
+    TSHS, pos_dSE=TSHS_0.xyz[0], area_Delta=Delta, TBTSE=TBTSE_0, reuse_SE=False)  
