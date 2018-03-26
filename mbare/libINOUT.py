@@ -340,7 +340,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
         GF.write_self_energy(S_i*e - H_i - SE_i) 
 
 
-def out2in_frame(TSHS, a_inner, eta_value, energies, TBT, 
+def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
     TBTSE=None, spin=0):
     """
@@ -349,7 +349,8 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
                             \Sigma will live on these atoms
     eta_value:              imaginary part in Green's function
     energies:               energy in eV for which \Sigma should be computed (closest E in TBT will be used )
-    TBT:                    *.TBT.nc (or *.TBT.SE.nc) from a TBtrans calc. where TBT.HS = TSHS 
+    TBT:                    *.TBT.nc (or *.TBT.SE.nc) from a TBtrans calc. where energy and kpoints are the desired ones
+                            es. it can be for example the TSHS one with the tip or the TSHS_0 without it  
     HS_host:                host (H, S) model (e.g. TSHS from separate system where \Sigma should be used as electrode). 
                             Coordinates of atoms "a_inner" in TSHS will be mapped into this new model.
                             Atomic order will be adjusted so that mapped atoms will be consecutive and at the end of the list
@@ -380,7 +381,10 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     dR = 0.005
 
     # a_dev from *TBT.nc and TBT.SE.nc is not sorted correctly in older versions of tbtrans!!! 
-    a_dev = np.sort(TBT.a_dev)
+    if TBTSE is not None:
+        a_dev = np.sort(TBTSE.a_dev)
+    else:
+        a_dev = np.arange(TSHS.na)
     a_inner = np.sort(a_inner)
     
     # Find indices of atoms and orbitals in device region 
@@ -426,7 +430,7 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     new_HS_host.geom.write('inside_HS_DEV.fdf')
     new_HS_host.write('inside_HS_DEV.nc')
 
-    # Energy grid
+    # Energy grid (read from a TBT.nc file which has the desired energy contour)
     if isinstance(energies[0], int):
         Eindices = list(energies)
     else:
