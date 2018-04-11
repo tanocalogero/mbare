@@ -51,7 +51,8 @@ def rearrange(HS, list, where='end'):
         list_new = np.arange(HS.na-len(list), HS.na)
     return list_new, HS_new
 
-def map_xyz(A, B, area_Delta, center_B=None, pos_B=None, area_int_for_buffer=None):
+def map_xyz(A, B, area_Delta, center_B=None, pos_B=None, area_int_for_buffer=None, 
+    tol=None):
     ### FRAME
     print('Mapping from DELTA in DFT geometry to THETA in host geometry')
     # Recover atoms in Delta region of model A
@@ -72,28 +73,49 @@ def map_xyz(A, B, area_Delta, center_B=None, pos_B=None, area_int_for_buffer=Non
     
     a_Theta = area_Theta.within_index(B_translated.xyz)
 
-    if len(a_Delta) != len(a_Theta):
-        print('len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
-        print('You should try to fiddle around in the script with the translation of model B...')
-        print('   Check a_Theta_not_matching.xyz')
-        v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
-        exit(1)
-
-    # CHECK: shift DFT and TB xyz to origo; sort DFT and TB lists in the same way; compare
+    # shift DFT and TB xyz to origo; sort DFT and TB lists in the same way; compare
     SE_xyz_inTSHS = A.xyz[a_Delta, :]
     SE_xyz_inTB = B.xyz[a_Theta, :]
     v1, v2 = np.amin(SE_xyz_inTSHS, axis=0), np.amin(SE_xyz_inTB, axis=0)
-    if np.allclose(SE_xyz_inTSHS - v1[None,:], SE_xyz_inTB - v2[None,:], rtol=1e-10, atol=1e-04):
-        print('\n The coordinates of the mapped atoms in the two geometries match perfectly!')
-    else:
-        print('\n STOOOOOP: The coordinates of the mapped atoms in the two geometries don\'t match!!!')
-        print(' Max deviation (Ang) =', np.amax(SE_xyz_inTSHS - v1[None,:] - (SE_xyz_inTB - v2[None,:])))
+    a = SE_xyz_inTB - v2[None,:]
+    b = SE_xyz_inTSHS - v1[None,:]
+    
+    if tol is None:
+        tol = [0.01, 0.01, 0.01]
+
+    # CHECK
+    if len(a_Delta) != len(a_Theta):
+        print('len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
+        # Check if a_Delta is included in a_Theta and if yes, try to solve the problem
+        # Following `https://stackoverflow.com/questions/33513204/finding-intersection-of-two-matrices-in-python-within-a-tolerance`
+        # Get absolute differences between a and b keeping their columns aligned
+        diffs = np.abs(np.asarray(a[:,None]) - np.asarray(b))
+        # Compare each row with the triplet from `tol`.
+        # Get mask of all matching rows and finally get the matching indices
+        x1,x2 = np.nonzero((diffs < tol).all(2))
+        if np.logical_and(len(x1) == len(x2), 
+                        np.allclose(a[x1], b[x2], rtol=np.amax(tol), atol=np.amax(tol))):
+            print('   Elements in a_Theta which are not in a_Delta have been filtered out from a_Theta')
+            print('\n The coordinates of the mapped atoms in the two geometries match \
+within the tolerance ({} Ang)!'.format(np.amax(tol)))
+            a_Theta = a_Theta[x1]
+            a, b = a[x1], b[x2]
+        elif len(x1) != len(x2):
+            print('\n STOOOOOP: not all elements of a_Delta are in a_Theta')
+            print('   Check `a_Theta_not_matching.xyz` and try to change `pos_B`')
+            v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
+            exit(1)
+
+    # Further CHECK: shift DFT and TB xyz to origo; sort DFT and TB lists in the same way; compare
+    if not np.allclose(a, b, rtol=np.amax(tol), atol=np.amax(tol)):
+        print('\n STOOOOOP: The coordinates of the mapped atoms in the two geometries don\'t match \
+within the tolerance ({} Ang)!!!!'.format(np.amax(tol)))
+        print(' Max deviation (Ang) =', np.amax(b - a))
         print(' Check out tmp_tshs.xyz and tmp_tb.xyz\n')
         a8 = si.Atom(8, R=[1.44])
         v = A.geom.copy(); v.atom[a_Delta] = a8; v.write('tmp_tshs.xyz')
         v = B.geom.copy(); v.atom[a_Theta] = a8; v.write('tmp_tb.xyz')
         exit(1)
-
 
     # WARNING: we are about to rearrange the atoms in the host geometry!!!
     a_Theta_rearranged, new_B = rearrange(B, a_Theta, where='end')
@@ -121,7 +143,7 @@ at the end of the coordinates list (1-based): {}\n{}".format(len(a_Theta_rearran
 
 def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, TBTSE=None,
-    useCAP=None, spin=0):
+    useCAP=None, spin=0, tol=None):
     """
     TSHS:                   TSHS from perturbed DFT system
     TSHS_0:                 TSHS from reference unperturbed DFT system
@@ -203,7 +225,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
     a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
-        area_Delta=area_Delta, area_int_for_buffer=area_int)
+        area_Delta=area_Delta, area_int_for_buffer=area_int, tol=tol)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
@@ -342,7 +364,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
-    TBTSE=None, spin=0, reuse_SE=False):
+    TBTSE=None, spin=0, reuse_SE=False, tol=None):
     """
     TSHS:                   TSHS from unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
@@ -414,13 +436,14 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     # Check
     vv = TSHS.geom.sub(a_dev)
     vv.atom[vv.o2a(o_inner, uniq=True)] = si.Atom(8, R=[1.44])
+    # Equivalent to vv.atom[a_inner] = si.Atom(8, R=[1.44])
     vv.write('inside_o_inner.xyz')
 
     # Map a_inner into host geometry (which includes electrodes!)
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
     a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, pos_B=pos_dSE, 
-        area_Delta=area_Delta, area_int_for_buffer=area_int)
+        area_Delta=area_Delta, area_int_for_buffer=area_int, tol=tol)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('inside_a_dSE_host.xyz')
     
     # Write final host model (same as TSHS, but
