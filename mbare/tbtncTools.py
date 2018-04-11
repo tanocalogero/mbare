@@ -662,14 +662,14 @@ def sc_xyz_shift(geom, axis):
 
 #def Delta(TSHS, HS_TB, shape='Cuboid', z_graphene=None, ext_offset=None, center=None, 
 def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None, 
-    thickness=None):
+    thickness=None, zaxis=2):
     # z coordinate of graphene plane 
     if z_graphene is None:
         print('\n\nPlease provide a value for z_graphene in Delta routine')
         exit(1)
     # Center of shape in TSHS 
     if center is None:
-        center = TSHS.center(atom=(TSHS.xyz[:,2] == z_graphene).nonzero()[0])
+        center = TSHS.center(atom=(TSHS.xyz[:,zaxis] == z_graphene).nonzero()[0])
         print('Setting Delta around this center: {}'.format(center))
     # Thickness in Ang
     if thickness is None:
@@ -677,7 +677,13 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
         #thickness = HS_TB.maxR()+0.01
     thickness = np.asarray(thickness, np.float64)
     # Cuboid or Ellissoid?
-    size = .5*np.diagonal(TSHS.cell) + [0,0,300] # default radius is half the cell size
+    if zaxis == 2:
+        size = .5*np.diagonal(TSHS.cell) + [0,0,300] # default radius is half the cell size
+    elif zaxis == 0:
+        size = .5*np.diagonal(TSHS.cell) + [300,0,0] # default radius is half the cell size
+    elif zaxis == 1:
+        size = .5*np.diagonal(TSHS.cell) + [0,300,0] # default radius is half the cell size
+
     if shape == 'Ellipsoid' or shape == 'Sphere':
         mkshape = si.shape.Ellipsoid
     elif shape == 'Cuboid' or shape == 'Cube':
