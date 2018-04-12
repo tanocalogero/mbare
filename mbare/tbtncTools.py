@@ -32,11 +32,11 @@ def displaySparse(m, filename, dpi=300):
     savefig(filename, facecolor='black', edgecolor='black', dpi=dpi)
     return ax
 
-def get_potential(TSHS, iio):
+def get_potential(TSHS, iio, atoms):
     """
     iio:    index (0-based) of orbital in basis set (i.e., pz in SZP: iio = 2)
     """
-    orbs = TSHS.a2o(np.arange(TSHS.na))+iio
+    orbs = TSHS.a2o(atoms)+iio
     on = TSHS.Hk(dtype=np.float64, format='array')[orbs, orbs]
     return on
 

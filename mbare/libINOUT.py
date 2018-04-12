@@ -82,40 +82,44 @@ def map_xyz(A, B, area_Delta, center_B=None, pos_B=None, area_int_for_buffer=Non
     
     if tol is None:
         tol = [0.01, 0.01, 0.01]
+    print('Tolerance along x,y,z is set to {}'.format(tol))
+    
+
+    # Check if a_Delta is included in a_Theta and if yes, try to solve the problem
+    # Following `https://stackoverflow.com/questions/33513204/finding-intersection-of-two-matrices-in-python-within-a-tolerance`
+    # Get absolute differences between a and b keeping their columns aligned
+    diffs = np.abs(np.asarray(a[:,None]) - np.asarray(b))
+    # Compare each row with the triplet from `tol`.
+    # Get mask of all matching rows and finally get the matching indices
+    x1,x2 = np.nonzero((diffs < tol).all(2))
 
     # CHECK
-    if len(a_Delta) != len(a_Theta):
-        print('len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
-        # Check if a_Delta is included in a_Theta and if yes, try to solve the problem
-        # Following `https://stackoverflow.com/questions/33513204/finding-intersection-of-two-matrices-in-python-within-a-tolerance`
-        # Get absolute differences between a and b keeping their columns aligned
-        diffs = np.abs(np.asarray(a[:,None]) - np.asarray(b))
-        # Compare each row with the triplet from `tol`.
-        # Get mask of all matching rows and finally get the matching indices
-        x1,x2 = np.nonzero((diffs < tol).all(2))
-        if np.logical_and(len(x1) == len(x2), 
-                        np.allclose(a[x1], b[x2], rtol=np.amax(tol), atol=np.amax(tol))):
-            print('   Elements in a_Theta which are not in a_Delta have been filtered out from a_Theta')
-            print('\n The coordinates of the mapped atoms in the two geometries match \
-within the tolerance ({} Ang)!'.format(np.amax(tol)))
-            a_Theta = a_Theta[x1]
-            a, b = a[x1], b[x2]
-        elif len(x1) != len(x2):
-            print('\n STOOOOOP: not all elements of a_Delta are in a_Theta')
-            print('   Check `a_Theta_not_matching.xyz` and try to change `pos_B`')
-            v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
-            exit(1)
+    if len(x1) == len(a_Delta):
+        if len(a_Theta) != len(a_Delta):
+            print('\nWARNING: len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
+            print('But since a_Delta is entirely contained in a_Theta, I will fix it by removing the extra atoms')
+        print('\n OK! The coordinates of the mapped atoms in the two geometries match \
+within the desired tolerance! ;)')
+        a_Theta, a_Delta = a_Theta[x1], a_Delta[x2]
+        a, b = a[x1], b[x2]
+    elif len(x1) < len(a_Delta):
+        print('\nWARNING: len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
+        print('\n STOOOOOP: not all elements of a_Delta are in a_Theta')
+        print('   Check `a_Theta_not_matching.xyz` vs `a_Delta.xyz` and \
+try to change `pos_B` or increase the tolerance')
+        v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
+        exit(1)
 
-    # Further CHECK: shift DFT and TB xyz to origo; sort DFT and TB lists in the same way; compare
+    # Further CHECK, just to be sure
     if not np.allclose(a, b, rtol=np.amax(tol), atol=np.amax(tol)):
         print('\n STOOOOOP: The coordinates of the mapped atoms in the two geometries don\'t match \
-within the tolerance ({} Ang)!!!!'.format(np.amax(tol)))
-        print(' Max deviation (Ang) =', np.amax(b - a))
-        print(' Check out tmp_tshs.xyz and tmp_tb.xyz\n')
-        a8 = si.Atom(8, R=[1.44])
-        v = A.geom.copy(); v.atom[a_Delta] = a8; v.write('tmp_tshs.xyz')
-        v = B.geom.copy(); v.atom[a_Theta] = a8; v.write('tmp_tb.xyz')
+within the tolerance!!!!')
+        print('   Check `a_Theta_not_matching.xyz` vs `a_Delta.xyz` and \
+try to change `pos_B` or increase the tolerance')
+        v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
         exit(1)
+
+    print(' Max deviation (Ang) =', np.amax(b-a))
 
     # WARNING: we are about to rearrange the atoms in the host geometry!!!
     a_Theta_rearranged, new_B = rearrange(B, a_Theta, where='end')
@@ -515,9 +519,9 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
 
         # if there's a self energy in the initial TSHS, read it now
         if TBTSE:
-            pv_L = TBTSE.pivot('Left', in_device=True, sort=True).reshape(-1, 1)
+            pv_L = TBTSE.pivot('L', in_device=True, sort=True).reshape(-1, 1)
             #pv_L_inner = np.in1d(o_inner, pv_L.reshape(-1, )).nonzero()[0].reshape(-1, 1)
-            pv_R = TBTSE.pivot('Right', in_device=True, sort=True).reshape(-1, 1)
+            pv_R = TBTSE.pivot('R', in_device=True, sort=True).reshape(-1, 1)
             #pv_R_inner = np.in1d(o_inner, pv_R.reshape(-1, )).nonzero()[0].reshape(-1, 1)
 
         kmesh = np.ones(3, dtype=np.int8); kmesh[PBCdir] = TBT.nkpt
@@ -557,10 +561,10 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
 
                 # add L and R
                 if TBTSE:
-                    SE_ext_L = TBTSE.self_energy('Left', E=e.real, k=kpt, sort=True)
+                    SE_ext_L = TBTSE.self_energy('L', E=e.real, k=kpt, sort=True)
                     #invG_i[pv_L_inner, pv_L_inner.T] -= SE_ext_L
                     invG_d[pv_L, pv_L.T] -= SE_ext_L
-                    SE_ext_R = TBTSE.self_energy('Right', E=e.real, k=kpt, sort=True)
+                    SE_ext_R = TBTSE.self_energy('R', E=e.real, k=kpt, sort=True)
                     #invG_i[pv_R_inner, pv_R_inner.T] -= SE_ext_R
                     invG_d[pv_R, pv_R.T] -= SE_ext_R
 
