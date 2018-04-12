@@ -364,7 +364,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
-    TBTSE=None, spin=0, reuse_SE=False, tol=None):
+    TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0):
     """
     TSHS:                   TSHS from unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
@@ -520,11 +520,12 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
             pv_R = TBTSE.pivot('Right', in_device=True, sort=True).reshape(-1, 1)
             #pv_R_inner = np.in1d(o_inner, pv_R.reshape(-1, )).nonzero()[0].reshape(-1, 1)
 
+        kmesh = np.ones(3, dtype=np.int8); kmesh[PBCdir] = TBT.nkpt
         if (TBT.kpt < 0.).any():
             print('Time reversal symmetry in TBTrans was off. To speed up we restore it')
-            mp = si.MonkhorstPack(TSHS.geom, [TBT.nkpt, 1, 1])
+            mp = si.MonkhorstPack(TSHS.geom, kmesh)
         else:
-            mp = si.MonkhorstPack(TSHS.geom, [TBT.nkpt, 1, 1], trs=False)
+            mp = si.MonkhorstPack(TSHS.geom, kmesh, trs=False)
 
         print('Computing and storing Sigma in TBTGF and dSE format...')
         ################## Loop over E
