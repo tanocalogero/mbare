@@ -368,7 +368,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
-    TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0):
+    TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0, elecnames=['Left', 'Right']):
     """
     TSHS:                   TSHS from unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
@@ -519,10 +519,9 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
 
         # if there's a self energy in the initial TSHS, read it now
         if TBTSE:
-            pv_L = TBTSE.pivot('L', in_device=True, sort=True).reshape(-1, 1)
-            #pv_L_inner = np.in1d(o_inner, pv_L.reshape(-1, )).nonzero()[0].reshape(-1, 1)
-            pv_R = TBTSE.pivot('R', in_device=True, sort=True).reshape(-1, 1)
-            #pv_R_inner = np.in1d(o_inner, pv_R.reshape(-1, )).nonzero()[0].reshape(-1, 1)
+            pv = []
+            for iele, ele in enumerate(elecnames):
+                pv.append(TBTSE.pivot(ele, in_device=True, sort=True).reshape(-1, 1))
 
         kmesh = np.ones(3, dtype=np.int8); kmesh[PBCdir] = TBT.nkpt
         if (TBT.kpt < 0.).any():
@@ -561,13 +560,10 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
 
                 # add L and R
                 if TBTSE:
-                    SE_ext_L = TBTSE.self_energy('L', E=e.real, k=kpt, sort=True)
-                    #invG_i[pv_L_inner, pv_L_inner.T] -= SE_ext_L
-                    invG_d[pv_L, pv_L.T] -= SE_ext_L
-                    SE_ext_R = TBTSE.self_energy('R', E=e.real, k=kpt, sort=True)
-                    #invG_i[pv_R_inner, pv_R_inner.T] -= SE_ext_R
-                    invG_d[pv_R, pv_R.T] -= SE_ext_R
-
+                    for iele, ele in enumerate(elecnames):
+                        SE_ext = TBTSE.self_energy(ele, E=e.real, k=kpt, sort=True)
+                        invG_d[pv[iele], pv[iele].T] -= SE_ext
+                    
                 # Invert
                 #G_i = np.linalg.inv(invG_i)
                 G_d = np.linalg.inv(invG_d)
