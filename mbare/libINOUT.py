@@ -191,10 +191,10 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     o_dev = TSHS.a2o(a_dev, all=True)
 
     # Check it's carbon atoms in inner
-    for ia in a_inner:
-        if TSHS.atom[ia].Z != 6:
-            print('\nERROR: please select C atoms in inner region \n')
-            exit(1)
+    #for ia in a_inner:
+    #    if TSHS.atom[ia].Z != 6:
+    #        print('\nERROR: please select C atoms in inner region \n')
+    #        exit(1)
 
     # Define inner region INSIDE the device region
     if pzidx is not None:
@@ -368,7 +368,8 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
-    TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0, elecnames=['Left', 'Right']):
+    TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0, kmesh=None, 
+    elecnames=['Left', 'Right']):
     """
     TSHS:                   TSHS from unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
@@ -417,10 +418,10 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     o_dev = TSHS.a2o(a_dev, all=True)
     
     # Check it's carbon atoms in inner
-    for ia in a_inner:
-        if TSHS.atom[ia].Z != 6:
-            print('\nERROR: please select C atoms in inner region \n')
-            exit(1)
+    #for ia in a_inner:
+    #    if TSHS.atom[ia].Z != 6:
+    #        print('\nERROR: please select C atoms in inner region \n')
+    #        exit(1)
 
     # Define inner region INSIDE the device region
     if pzidx is not None:
@@ -523,7 +524,8 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
             for iele, ele in enumerate(elecnames):
                 pv.append(TBTSE.pivot(ele, in_device=True, sort=True).reshape(-1, 1))
 
-        kmesh = np.ones(3, dtype=np.int8); kmesh[PBCdir] = TBT.nkpt
+        if kmesh is None:
+            kmesh = np.ones(3, dtype=np.int8); kmesh[PBCdir] = TBT.nkpt
         if (TBT.kpt < 0.).any():
             print('Time reversal symmetry in TBTrans was off. To speed up we restore it')
             mp = si.MonkhorstPack(TSHS.geom, kmesh)
