@@ -276,7 +276,14 @@ def atom_current_radial(tbt, elec, E, kavg=True, activity=True,
     return radii, thetas, current_r
 
 
-def CAP(geometry, side, dz_CAP=30, write_xyz=True):
+def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2):
+    # Determine orientation
+    if zaxis == 2:
+        xaxis, yaxis = 0, 1
+    elif zaxis == 0:
+        xaxis, yaxis = 1, 2
+    elif zaxis == 1:
+        xaxis, yaxis = 0, 2
     # Natural units (see "http://superstringtheory.com/unitsa.html")
     hbar = 1 
     m = 0.511e6 # eV
@@ -289,8 +296,8 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True):
     ### EDGES
     if 'right' in side:
         print('Setting at right')
-        z, y = geometry.xyz[:, 0], geometry.xyz[:, 1]
-        z2 = np.max(geometry.xyz[:, 0]) + 1.
+        z, y = geometry.xyz[:, xaxis], geometry.xyz[:, yaxis]
+        z2 = np.max(geometry.xyz[:, xaxis]) + 1.
         z1 = z2 - dz_CAP
         idx = np.where(np.logical_and(z1 <= z, z < z2))[0]
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
@@ -303,8 +310,8 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True):
 
     if 'left' in side:
         print('Setting at left')
-        z, y = geometry.xyz[:, 0], geometry.xyz[:, 1]
-        z2 = np.min(geometry.xyz[:, 0]) - 1.
+        z, y = geometry.xyz[:, xaxis], geometry.xyz[:, yaxis]
+        z2 = np.min(geometry.xyz[:, xaxis]) - 1.
         z1 = z2 + dz_CAP
         idx = np.where(np.logical_and(z2 < z, z <= z1))[0]
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
@@ -317,8 +324,8 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True):
 
     if 'top' in side:
         print('Setting at top')
-        z, y = geometry.xyz[:, 0], geometry.xyz[:, 1]
-        y2 = np.max(geometry.xyz[:, 1]) + 1.
+        z, y = geometry.xyz[:, xaxis], geometry.xyz[:, yaxis]
+        y2 = np.max(geometry.xyz[:, yaxis]) + 1.
         y1 = y2 - dz_CAP
         idx = np.where(np.logical_and(y1 <= y, y < y2))[0]
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
@@ -331,8 +338,8 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True):
 
     if 'bottom' in side:
         print('Setting at bottom')
-        z, y = geometry.xyz[:, 0], geometry.xyz[:, 1]
-        y2 = np.min(geometry.xyz[:, 1]) - 1.
+        z, y = geometry.xyz[:, xaxis], geometry.xyz[:, yaxis]
+        y2 = np.min(geometry.xyz[:, yaxis]) - 1.
         y1 = y2 + dz_CAP
         idx = np.where(np.logical_and(y2 < y, y <= y1))[0]
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
