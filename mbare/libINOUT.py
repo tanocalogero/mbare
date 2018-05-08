@@ -447,12 +447,14 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     # Map a_inner into host geometry (which includes electrodes!)
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
-    a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, pos_B=pos_dSE, 
+    a_dSE_host, sorted_HS_host = map_xyz(A=TSHS, B=HS_host, pos_B=pos_dSE, 
         area_Delta=area_Delta, area_int_for_buffer=area_int, tol=tol)
-    v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('inside_a_dSE_host.xyz')
+    v = sorted_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('inside_a_dSE_host.xyz')
+    sorted_HS_host.write('inside_HS_DEV_periodic.nc')
     
     # Write final host model (same as TSHS, but
     # w/o periodic boundary conditions and with frame at the end of the coor.list)
+    new_HS_host = sorted_HS_host.copy()
     new_HS_host.set_nsc([1]*3)    
     new_HS_host.geom.write('inside_HS_DEV.xyz')
     new_HS_host.geom.write('inside_HS_DEV.fdf')
@@ -525,12 +527,19 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
                 pv.append(TBTSE.pivot(ele, in_device=True, sort=True).reshape(-1, 1))
 
         if kmesh is None:
-            kmesh = np.ones(3, dtype=np.int8); kmesh[PBCdir] = TBT.nkpt
+            kmesh = list(np.ones(3, dtype=np.int8))
+            kmesh[PBCdir] = TBT.nkpt
+
+        print('Using kmesh = {} from {}'.format(kmesh, TBT))
+
         if (TBT.kpt < 0.).any():
-            print('Time reversal symmetry in TBTrans was off. To speed up we restore it')
+            print('Time reversal symmetry in TBTrans was off. To speed up we restore it.')
             mp = si.MonkhorstPack(TSHS.geom, kmesh)
+            klist = mp.k
+            wklist = mp.weight
         else:
-            mp = si.MonkhorstPack(TSHS.geom, kmesh, trs=False)
+            klist = TBT.kpt
+            wklist = TBT.wkpt
 
         print('Computing and storing Sigma in TBTGF and dSE format...')
         ################## Loop over E
@@ -541,8 +550,8 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
             
             ################## Loop over transverse k-points and average
             #for ikpt, (kpt, wkpt) in enumerate(zip(TBT.kpt, TBT.wkpt)):        
-            for ikpt, (kpt, wkpt) in enumerate(zip(mp.k, mp.weight)):        
-                print('Doing kpt # {} of {}  {}'.format(ikpt+1, len(mp.k), kpt))
+            for ikpt, (kpt, wkpt) in enumerate(zip(klist, wklist)):        
+                print('Doing kpt # {} of {}  {}'.format(ikpt+1, len(klist), kpt))
                 # Read H and S from full TSHS (L+D+R) - no self-energies here!
                 if TSHS_n.spin.is_polarized:
                     Hfullk = TSHS.Hk(kpt, format='array', spin=spin)
@@ -607,4 +616,3 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
             G4dos = np.linalg.inv(invG4dos)
             dos = -np.trace(np.dot(G4dos, S4dos).imag)/np.pi
             print('dos:\t{}\t{}'.format(e.real, dos))
-
