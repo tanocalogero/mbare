@@ -28,11 +28,14 @@ def couplingMat(M, iosel1, iosel2, format='array'):
         return Mp
 
 def pruneMat(M, iosel, format='array'):
-    # NB: PruneMat(M, pz_idx_list) is a rapid way to obtain 
-    # the same result of pzProjected(..., ..., 'all')
-    # (Demonstrated in "~/DTU-SCRATCH/dft2tb/dft2tb/04_Plugin_SelfEnergy/1_makedH/1_*/2_compare_pruned_with_pzProj-varying-nn/")
+    n_s = M.shape[1] // M.shape[0]
     iosel.shape = (-1, 1)
-    Mp = M[iosel, iosel.T]
+    if n_s != 1:
+        iosel2 = np.arange(n_s) * M.shape[0]
+        iosel2 = (iosel + iosel2.reshape(1, -1)).reshape(1, -1)
+    else:
+        iosel2 = iosel.reshape(1, -1)
+    Mp = M[iosel, iosel2]
     if format == 'csr':
         return sp.sparse.csr_matrix(Mp)
     elif format == 'array':
@@ -368,7 +371,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
-    TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0, kmesh=None, 
+    TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0, kmesh=None, kfromfile=True, 
     elecnames=['Left', 'Right']):
     """
     TSHS:                   TSHS from unperturbed DFT system
@@ -526,20 +529,39 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
             for iele, ele in enumerate(elecnames):
                 pv.append(TBTSE.pivot(ele, in_device=True, sort=True).reshape(-1, 1))
 
-        if kmesh is None:
-            kmesh = list(np.ones(3, dtype=np.int8))
-            kmesh[PBCdir] = TBT.nkpt
-
-        print('Using kmesh = {} from {}'.format(kmesh, TBT))
-
-        if (TBT.kpt < 0.).any():
-            print('Time reversal symmetry in TBTrans was off. To speed up we restore it.')
+        # In principle we can average G over a different kpt grid than a one that you would
+        # use for a standard tbtrans calculation. 
+        # So here we allow the user to define it from scratch.
+        # By default we use time-reversal symmetry.
+        # If no kmesh is provided, then we read it from TBT.
+        #   WARNING: TBT might not contain a good grid. 
+        #   Always check that the kpoint selected are OK!!!
+        if kfromfile:
+            # If there is only one periodic direction, one just needs to set PBCdir
+            if kmesh is None:
+                kmesh = list(np.ones(3, dtype=np.int8))
+                kmesh[PBCdir] = TBT.nkpt
+            print('Reading {} kpoints from {}'.format(kmesh, TBT))
+            # Restore TRS if absent from file
+            if (TBT.kpt < 0.).any():
+                print('Time reversal symmetry can be used in file. To speed up we restore it.')
+                mp = si.MonkhorstPack(TSHS.geom, kmesh)
+                klist = mp.k
+                wklist = mp.weight
+            else:
+                klist = TBT.kpt
+                wklist = TBT.wkpt            
+        else:
+            if kmesh is None:
+                print('Please provide "kmesh", or set "kfromfile" to True to use kpts from {}'.format(TBT))
+                print('Bye...'); exit(1)
+            print('User provided kpoints mesh: {}'.format(kmesh))
             mp = si.MonkhorstPack(TSHS.geom, kmesh)
             klist = mp.k
             wklist = mp.weight
-        else:
-            klist = TBT.kpt
-            wklist = TBT.wkpt
+        print('List of selected kpoints | weights:')
+        for j1,j2 in zip(klist, wklist):
+            print('  {}\t{}'.format(j1,j2))
 
         print('Computing and storing Sigma in TBTGF and dSE format...')
         ################## Loop over E
@@ -549,7 +571,6 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
             Gssum_d = np.zeros((len(o_dev), len(o_dev)), np.complex128)
             
             ################## Loop over transverse k-points and average
-            #for ikpt, (kpt, wkpt) in enumerate(zip(TBT.kpt, TBT.wkpt)):        
             for ikpt, (kpt, wkpt) in enumerate(zip(klist, wklist)):        
                 print('Doing kpt # {} of {}  {}'.format(ikpt+1, len(klist), kpt))
                 # Read H and S from full TSHS (L+D+R) - no self-energies here!
