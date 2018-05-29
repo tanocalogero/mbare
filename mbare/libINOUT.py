@@ -28,11 +28,17 @@ def couplingMat(M, iosel1, iosel2, format='array'):
         return Mp
 
 def pruneMat(M, iosel, format='array'):
+    """
+    M:      sparse matrix in csr format
+    iosel:  list of orbitals on which M has to be pruned
+    """    
     n_s = M.shape[1] // M.shape[0]
     iosel.shape = (-1, 1)
     if n_s != 1:
         iosel2 = np.arange(n_s) * M.shape[0]
-        iosel2 = (iosel + iosel2.reshape(1, -1)).reshape(1, -1)
+        a = np.repeat(iosel.ravel(), n_s)
+        iosel2 = (a.reshape(-1, n_s) + iosel2.reshape(1, -1)).ravel()
+        iosel2 = np.sort(iosel2).reshape(1, -1)
     else:
         iosel2 = iosel.reshape(1, -1)
     Mp = M[iosel, iosel2]
@@ -40,6 +46,20 @@ def pruneMat(M, iosel, format='array'):
         return sp.sparse.csr_matrix(Mp)
     elif format == 'array':
         return Mp
+
+def pruneMat_range(M, RMAX):
+    """
+    M:      Hamiltonian object
+    RMAX:   Maximum interaction range to be retained
+    """
+    Mcsr1, Mcsr2 = M.tocsr(0), M.tocsr(M.S_idx)
+    RIJ = M.rij(what='orbital').tocsr(0)
+    mask = RIJ > RMAX
+    Mcsr1[mask] = 0
+    Mcsr1.eliminate_zeros()
+    Mcsr2[mask] = 0
+    Mcsr2.eliminate_zeros()
+    return Mcsr1, Mcsr2
 
 def rearrange(HS, list, where='end'):
     if 'end' in where:
