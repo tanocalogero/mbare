@@ -669,7 +669,7 @@ def sc_xyz_shift(geom, axis):
 
 #def Delta(TSHS, HS_TB, shape='Cuboid', z_graphene=None, ext_offset=None, center=None, 
 def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None, 
-    thickness=None, zaxis=2):
+    thickness=None, zaxis=2, atoms=None):
     # z coordinate of graphene plane 
     if z_graphene is None:
         print('\n\nPlease provide a value for z_graphene in Delta routine')
@@ -699,7 +699,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
         size *= 2
         thickness *= 2
         if ext_offset is not None:
-            ext_offset = np.asarray(ext_offset, np.float64)
+            ext_offset = np.asarray(ext_offset, np.float64).copy()
             ext_offset *= 2
     else:
         print('\n shape = "{}" is not implemented...'.format(shape))
@@ -728,6 +728,8 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
     # Atoms within Delta and internal boundary
     a_Delta = Delta.within_index(TSHS.xyz)
     a_int = area_int.within_index(TSHS.xyz)
+    if atoms is not None:
+        a_Delta = a_Delta[np.in1d(a_Delta, atoms)]
     # Check
     v = TSHS.geom.copy(); v.atom[a_Delta] = si.Atom(8, R=[1.43]); v.write('a_Delta.xyz')
     return a_Delta, a_int, Delta, area_int
@@ -1509,7 +1511,7 @@ def plot_transmission_bulk(H, iE, ymin=None, ymax=None, style='-', color='k', la
 
     return ax, tr
 
-def read_bondcurrents(f, idx_elec, sum='+', E=0.0, k='avg'):#, atoms=None):
+def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     
     print('Reading: {}'.format(f))
     nc = si.get_sile(f)
@@ -1539,11 +1541,11 @@ def read_bondcurrents(f, idx_elec, sum='+', E=0.0, k='avg'):#, atoms=None):
 
     idx_E = nc.Eindex(E)
     print('Extracting bond-currents at energy: {} eV'.format(nc.E[idx_E]))
-    bc = nc.bond_current(elec, kavg=avg, isc=[0,0,0], sum=sum, E=idx_E, uc=True)
+    bc = nc.bond_current(elec, kavg=avg, isc=[0,0,0], only=only, E=idx_E, uc=True)
 
     return bc, nc.E[idx_E], geom
 
-    # bc_coo = nc.bond_current(elec, kavg=avg, isc=[0,0,0], sum=sum, E=idx_E, uc=True).tocoo()
+    # bc_coo = nc.bond_current(elec, kavg=avg, isc=[0,0,0], only=only, E=idx_E, uc=True).tocoo()
     # i_list = bc_coo.row
     # j_list = bc_coo.col
     # bc_list = bc_coo.data
@@ -1613,7 +1615,7 @@ class Groupby:
 
         return result
 
-def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  zaxis=2, k='avg', avg=True, scale='raw', xyz_origin=None,
+def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True, scale='raw', xyz_origin=None,
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
     lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, spsite=None):   
     """ 
@@ -1625,7 +1627,7 @@ def plot_bondcurrents(f, idx_elec, sum='+', E=0.0,  zaxis=2, k='avg', avg=True, 
     elec = nc.elecs[idx_elec]
     
     # Read bond currents from TBT.nc file
-    bc, energy, geom = read_bondcurrents(f, idx_elec, sum, E, k)
+    bc, energy, geom = read_bondcurrents(f, idx_elec, only, E, k)
 
     # If needed, select only selected atoms from bc_bg.
     if atoms is None:
@@ -1977,7 +1979,8 @@ def read_ADOS(f, idx_elec, E=0.0, k='avg', atoms=None, sum=True):
     geom = nc.geom
 
     # if atoms is a list of negative numbers, use all atoms except them
-    if atoms and atoms[0] < 0:
+
+    if atoms and (atoms[0] < 0):
         atoms = list(set(nc.a_dev).difference(set(-np.asarray(atoms))))     # this is 0-based
 
     if atoms is None:
@@ -2144,17 +2147,24 @@ def mask_interpolate(coords, values, a=None, method='nearest', oversampling=300)
 
 
 
-def plot_ADOS(f, idx_elec, E=0.0, k='avg', vmin=None, vmax=None, log=False, map=False, 
-    lattice=False, atoms=None, out=None):
+def plot_ADOS(f, idx_elec, E=0.0, k='avg', sum=False, vmin=None, vmax=None, log=False, map=False, 
+    lattice=False, ps=20, atoms=None, out=None, zaxis=2, spsite=None, scale='raw'):
 
     t = time.time()
     print('\n***** ADOS (2D map) *****\n')    
+
+    if zaxis == 2:
+        xaxis, yaxis = 0, 1
+    elif zaxis == 0:
+        xaxis, yaxis = 1, 2
+    elif zaxis == 1:
+        xaxis, yaxis = 0, 2
 
     nc = si.get_sile(f)
     elec = nc.elecs[idx_elec]
 
     # Read ADOS from TBT.nc file
-    geom, ai_list, ADOS, energy = read_ADOS(f, idx_elec, E, k, atoms)
+    geom, ai_list, ADOS, energy = read_ADOS(f, idx_elec, E, k, atoms, sum=sum)
 
         
     # Plot
@@ -2170,15 +2180,23 @@ def plot_ADOS(f, idx_elec, E=0.0, k='avg', vmin=None, vmax=None, log=False, map=
     fig, ax = plt.subplots()
     ax.set_aspect('equal')
 
-    x, y = geom.xyz[ai_list, 0], geom.xyz[ai_list, 1]
+    x, y = geom.xyz[ai_list, xaxis], geom.xyz[ai_list, yaxis]
 
     if log:
         ADOS = np.log(ADOS+1)
 
-    if vmin is None:
-        vmin = np.min(ADOS)
-    if vmax is None:
-        vmax = np.max(ADOS)
+    if scale is '%':
+        if vmin is None:
+            vmin = np.amin(ADOS)*100/np.amax(ADOS) 
+        if vmax is None:
+            vmax = 100
+        vmin = vmin*np.amax(ADOS)/100
+        vmax = vmax*np.amax(ADOS)/100
+    else:
+        if vmin is None:
+            vmin = np.amin(ADOS) 
+        if vmax is None:
+            vmax = np.amax(ADOS)
 
     if map:
         coords = np.column_stack((x, y))
@@ -2200,20 +2218,33 @@ def plot_ADOS(f, idx_elec, E=0.0, k='avg', vmin=None, vmax=None, log=False, map=
         image.set_array(ADOS)
 
     if lattice:
-        xl, yl = geom.xyz[:, 0], geom.xyz[:, 1]
-        ax.scatter(xl, yl, s=20, c='w', marker='o', edgecolors='k')
-        ax.scatter(x, y, s=40, c='k', marker='o', edgecolors='None')
+        xl, yl = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
+        ax.scatter(xl, yl, s=ps*2, c='w', marker='o', edgecolors='k')
+        ax.scatter(x, y, s=ps*2, c='k', marker='o', edgecolors='None')
+
+    if spsite is not None:
+        xs, ys = geom.xyz[spsite, xaxis], geom.xyz[spsite, yaxis]
+        ax.scatter(xs, ys, s=ps*2, marker='x', color='red')
 
     ax.autoscale()
-    ax.margins(0.1)
+    ax.margins(0.)
     plt.xlabel('$x (\AA)$')
     plt.ylabel('$y (\AA)$')
     plt.gcf()
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
-    axcb = plt.colorbar(image, cax=cax, format='%f', ticks=[vmin, vmax])
-
+    if scale is '%':
+        axcb = plt.colorbar(image, cax=cax, format='%f', ticks=[vmin/ADOS.max(), vmax/ADOS.max()])
+        vmin, vmax = vmin*100/ADOS.max(), vmax*100/ADOS.max()
+        axcb.ax.set_yticklabels(['{:.1f} %'.format(vmin), '{:.1f} %'.format(vmax)])
+        print('MIN bc among selected atoms (in final plot) = {:.1f} %'.format(vmin))
+        print('MAX bc among selected atoms (in final plot) = {:.1f} %'.format(vmax))
+    else:
+        axcb = plt.colorbar(image, cax=cax, format='%f', ticks=[vmin, vmax])
+        axcb.ax.set_yticklabels(['{:.3e}'.format(vmin), '{:.3e}'.format(vmax)])
+        print('MIN bc among selected atoms (in final plot) = {}'.format(vmin))
+        print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))
     plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=300)
     print('Successfully plotted to "{}"'.format(figname))
     print('Done in {} sec'.format(time.time() - t))
