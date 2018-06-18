@@ -61,6 +61,34 @@ def pruneMat_range(M, RMAX):
     Mcsr2.eliminate_zeros()
     return Mcsr1, Mcsr2
 
+def prune(HS, atoms, orb_idx, R=None):
+    """
+    HS:         [sisl non-orthogonal Hamiltonian object]
+    atoms:       [array] atoms whose orbitals will be extracted from DFT
+    orb_idx:    [array int] orbital indices in HS basis to be extracted for each atom
+    R:          [float] max range of interaction among orbs to be retained from HS 
+    """
+    ############################
+    # Create sub geometry from HS on "atoms" and with # orbitals = len(orb_idx)
+    g = HS.geom.sub(atoms); g.reduce()
+    a = si.Atom(g.atoms.Z[0], R=[g.maxR()]*len(orb_idx))
+    geom = si.Geometry(g.xyz, a, g.sc)
+    # Find sorted list of orbitals to extract from HS 
+    orbs = np.sort(np.concatenate([np.add.outer(HS.a2o(atoms), np.array([io])).ravel() 
+        for io in orb_idx])) 
+    # Extract orbs from HS
+    Hcsr, Scsr = HS.tocsr(0), HS.tocsr(HS.S_idx) 
+    Hcsr_orbs, Scsr_orbs = pruneMat(Hcsr, orbs), pruneMat(Scsr, orbs)
+    # Construct new TB Hamiltonian
+    HS_orbs = si.Hamiltonian.fromsp(geom, Hcsr_orbs, Scsr_orbs)
+    # Notice that this Hamiltonian preserves the full interaction range
+    if R is not None:
+        Hcsr_orbs_R, Scsr_orbs_R = pruneMat_range(HS_orbs, R)
+        HS_orbs_R = si.Hamiltonian.fromsp(geom, Hcsr_orbs_R, Scsr_orbs_R)
+        return HS_orbs_R
+    else:
+        return HS_orbs
+
 def rearrange(HS, list, where='end'):
     if 'end' in where:
         # Remove selection from the current TB geom and append it at the end of its atoms list
@@ -72,14 +100,16 @@ def rearrange(HS, list, where='end'):
         HS_new = HS.sub(full) 
         # List indices in new HS
         list_new = np.arange(HS.na-len(list), HS.na)
+
     return list_new, HS_new
 
-def map_xyz(A, B, area_Delta, center_B=None, pos_B=None, area_int_for_buffer=None, 
+def map_xyz(A, B, area_Delta, a_Delta=None, center_B=None, pos_B=None, area_int_for_buffer=None, 
     tol=None):
     ### FRAME
     print('Mapping from DELTA in DFT geometry to THETA in host geometry')
-    # Recover atoms in Delta region of model A
-    a_Delta = area_Delta.within_index(A.xyz)
+    if a_Delta is None:
+        # Recover atoms in Delta region of model A
+        a_Delta = area_Delta.within_index(A.xyz)
     # Find the set Theta of unique corresponding atoms in model B 
     area_Theta = area_Delta.copy()
 
@@ -89,65 +119,74 @@ def map_xyz(A, B, area_Delta, center_B=None, pos_B=None, area_int_for_buffer=Non
     else: 
         if center_B is None: 
             center_B = B.center(what='xyz')
-        #shift = [sc_xyz_shift(B, 0), 2*sc_xyz_shift(B, 1), 0.]
-        shift = [0.,0.,0.]
-        vector = center_B -shift -area_Theta.center
+        vector = center_B -area_Theta.center
         B_translated = B.translate(-vector) 
     
     a_Theta = area_Theta.within_index(B_translated.xyz)
 
     # shift DFT and TB xyz to origo; sort DFT and TB lists in the same way; compare
-    SE_xyz_inTSHS = A.xyz[a_Delta, :]
-    SE_xyz_inTB = B.xyz[a_Theta, :]
-    v1, v2 = np.amin(SE_xyz_inTSHS, axis=0), np.amin(SE_xyz_inTB, axis=0)
-    a = SE_xyz_inTB - v2[None,:]
-    b = SE_xyz_inTSHS - v1[None,:]
+    #SE_xyz_inTSHS = A.xyz[a_Delta, :]
+    #SE_xyz_inTB = B.xyz[a_Theta, :]
+    #v1, v2 = np.amin(SE_xyz_inTSHS, axis=0), np.amin(SE_xyz_inTB, axis=0)
+    #a = SE_xyz_inTB - v2[None,:]
+    #b = SE_xyz_inTSHS - v1[None,:]
     
+    Delta = A.sub(a_Delta)
+    Theta = B.sub(a_Theta)
+    v1, v2 = np.amin(Delta.xyz, axis=0), np.amin(Theta.xyz, axis=0)
+    a = Theta.xyz - v2[None,:]
+    b = Delta.xyz - v1[None,:]
+
+
     if tol is None:
         tol = [0.01, 0.01, 0.01]
+    tol = np.asarray(tol)
     print('Tolerance along x,y,z is set to {}'.format(tol))
     
 
     # Check if a_Delta is included in a_Theta and if yes, try to solve the problem
     # Following `https://stackoverflow.com/questions/33513204/finding-intersection-of-two-matrices-in-python-within-a-tolerance`
     # Get absolute differences between a and b keeping their columns aligned
-    diffs = np.abs(np.asarray(a[:,None]) - np.asarray(b))
+    diffs = np.abs(a.reshape(-1, 1, 3) - b.reshape(1, -1, 3))
     # Compare each row with the triplet from `tol`.
     # Get mask of all matching rows and finally get the matching indices
-    x1,x2 = np.nonzero((diffs < tol).all(2))
+    x1, x2 = np.nonzero((diffs < tol.reshape(1, 1, -1)).all(2))
+    idx_swap = np.argsort(x2[:len(x1)])
+    x1_reorder = x1[idx_swap]
 
     # CHECK
     if len(x1) == len(a_Delta):
-        if len(a_Theta) != len(a_Delta):
+        if len(a_Theta) > len(a_Delta):
             print('\nWARNING: len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
             print('But since a_Delta is entirely contained in a_Theta, I will fix it by removing the extra atoms')
         print('\n OK! The coordinates of the mapped atoms in the two geometries match \
 within the desired tolerance! ;)')
-        a_Theta, a_Delta = a_Theta[x1], a_Delta[x2]
-        a, b = a[x1], b[x2]
-    elif len(x1) < len(a_Delta):
+    else:
         print('\nWARNING: len(a_Delta) = {} is not equal to len(a_Theta) = {}'.format(len(a_Delta), len(a_Theta)))
         print('\n STOOOOOP: not all elements of a_Delta are in a_Theta')
         print('   Check `a_Theta_not_matching.xyz` vs `a_Delta.xyz` and \
-try to change `pos_B` or increase the tolerance')
+try to set `pos_B` to `B.center(what=\'xyz\') + [dx,dy,dz]`. Or increase the tolerance')
         v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
         exit(1)
 
+    a_Theta, a_Delta = a_Theta[x1_reorder], a_Delta[x2]
+
     # Further CHECK, just to be sure
-    if not np.allclose(a, b, rtol=np.amax(tol), atol=np.amax(tol)):
+    if not np.allclose(a[x1], b[x2], rtol=np.amax(tol), atol=np.amax(tol)):
         print('\n STOOOOOP: The coordinates of the mapped atoms in the two geometries don\'t match \
 within the tolerance!!!!')
         print('   Check `a_Theta_not_matching.xyz` vs `a_Delta.xyz` and \
-try to change `pos_B` or increase the tolerance')
+try to set `pos_B` to `B.center(what=\'xyz\') + [dx,dy,dz]`. Or increase the tolerance')
         v = B.geom.copy(); v.atom[a_Theta] = si.Atom(8, R=[1.44]); v.write('a_Theta_not_matching.xyz')
         exit(1)
 
-    print(' Max deviation (Ang) =', np.amax(b-a))
+    print(' Max deviation (Ang) =', np.amax(b[x2]-a[x1]))
 
     # WARNING: we are about to rearrange the atoms in the host geometry!!!
     a_Theta_rearranged, new_B = rearrange(B, a_Theta, where='end')
     print("\nSelected atoms mapped into host geometry, after rearrangement\n\
 at the end of the coordinates list (1-based): {}\n{}".format(len(a_Theta_rearranged), list2range_TBTblock(a_Theta_rearranged)))
+
 
     # Find and print buffer atoms
     if area_int_for_buffer is not None:
@@ -155,7 +194,7 @@ at the end of the coordinates list (1-based): {}\n{}".format(len(a_Theta_rearran
         # NB: that cuboids are always independent from the sorting in the host geometry
         area_int_B = area_int_for_buffer.copy()
         if center_B is not None:
-            area_int_B.set_center(center_B-shift)
+            area_int_B.set_center(center_B)
         buffer = area_int_B.within_index(new_B.xyz)
         # Write buffer atoms fdf block
         print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(buffer), list2range_TBTblock(buffer)))
@@ -207,17 +246,18 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     dR = 0.005
 
     # a_dev from *TBT.nc and TBT.SE.nc is not sorted correctly in older versions of tbtrans!!! 
+    #a_dev = TBT.a_dev
     a_dev = np.sort(TBT.a_dev)
     a_inner = np.sort(a_inner)
-    
+
     # Find indices of atoms and orbitals in device region 
     o_dev = TSHS.a2o(a_dev, all=True)
 
     # Check it's carbon atoms in inner
-    #for ia in a_inner:
-    #    if TSHS.atom[ia].Z != 6:
-    #        print('\nERROR: please select C atoms in inner region \n')
-    #        exit(1)
+    for ia in a_inner:
+        if TSHS.atom[ia].Z != 6:
+            print('\nERROR: please select C atoms in inner region \n')
+            exit(1)
 
     # Define inner region INSIDE the device region
     if pzidx is not None:
@@ -252,16 +292,17 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
     a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
-        area_Delta=area_Delta, area_int_for_buffer=area_int, tol=tol)
+        area_Delta=area_Delta, a_Delta=a_inner, area_int_for_buffer=area_int, tol=tol)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
     new_HS_host.geom.write('HS_DEV.fdf')
     new_HS_host.write('HS_DEV.nc')
+
     
     if useCAP:
         # Create dH | CAP
-        dH_CAP = CAP(new_HS_host.geom, useCAP, dz_CAP=30, write_xyz=True)
+        dH_CAP = CAP(new_HS_host.geom, useCAP, dz_CAP=50, write_xyz=True)
         dH_CAP_sile = si.get_sile('CAP.delta.nc', 'w')
         dH_CAP_sile.write_delta(dH_CAP)
 
@@ -271,7 +312,9 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     else:
         Eindices = [TBT.Eindex(en) for en in energies]
     E = TBT.E[Eindices] + 1j*eta_value
-    
+    tbl = si.io.table.tableSile('contour.IN', 'w')
+    tbl.write_data(E.real, np.zeros(len(E)), np.ones(len(E)), fmt='.8f')
+
     # Remove periodic boundary conditions
     print('Removing periodic boundary conditions')
     TSHS_n = TSHS.copy()
@@ -285,6 +328,14 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     ##### Setup TBTGF
     print('Initializing TBTGF files...')
     # This is needed already here because of TBTGF (only @ Gamma!)
+#    new = new_HS_host.copy()
+#    new.set_nsc([1,1,1])
+#    Semi = new.sub(a_dSE_host)
+    # H_tbtgf = new_HS_host.Hk(dtype=np.float64)
+    # S_tbtgf = new_HS_host.Sk(dtype=np.float64)
+    # H_tbtgf_i = pruneMat(H_tbtgf, o_dSE_host)
+    # S_tbtgf_i = pruneMat(S_tbtgf, o_dSE_host)
+
     if TSHS_n.spin.is_polarized:
         H_tbtgf = TSHS_n.Hk(dtype=np.float64, spin=spin)
     else:
@@ -297,25 +348,61 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     # Prune matrices from device region to inner region
     H_tbtgf_i = pruneMat(H_tbtgf_d, o_inner)
     S_tbtgf_i = pruneMat(S_tbtgf_d, o_inner)
-    # Create a geometry (one orb per atom, if DFT2TB) containing only inner atoms
-    r = get_dft_param(TSHS_0, 0, pzidx, pzidx, unique=True, onlynnz=True)[0]
-    g = si.geom.graphene(r[1], orthogonal=True)
-    geom_dev = TSHS_n.geom.sub(a_dev)
-    geom_dev = geom_dev.translate(-geom_dev.xyz[0, :])
-    geom_dev.set_sc(g.sc.fit(geom_dev))
-    geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, uniq=True))
-    geom_inner = geom_inner.translate(-geom_inner.xyz[0, :])
-    geom_inner.set_sc(g.sc.fit(geom_inner))
+#    # Create a geometry (one orb per atom, if DFT2TB) containing only inner atoms
+    #r = get_dft_param(TSHS_0, 0, pzidx, pzidx, unique=True, onlynnz=True)[0]
+    #g = si.geom.graphene(r[1], orthogonal=True)
+    
+    #g = si.geom.graphene(1.44, orthogonal=True)
+    #geom_dev = TSHS_n.geom.sub(a_dev)
+    #geom_dev = geom_dev.translate(-geom_dev.xyz[0, :])
+    #geom_dev.set_sc(g.sc.fit(geom_dev))
+    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, uniq=True))
+    #geom_inner = geom_inner.translate(-geom_inner.xyz[0, :])
+    #geom_inner.set_sc(g.sc.fit(geom_inner))
+
+    geom_inner2 = TSHS_n.geom.sub(a_inner)
+    geom_inner2 = geom_inner2.translate(-geom_inner2.xyz.min(0))
+    #geom_inner.write('test1.xyz')
+    
+    #geom_inner = new_HS_host.geom.sub(a_dSE_host)
+    geom_inner = new_HS_host.geom.sub(a_dSE_host)
+    geom_inner = geom_inner.translate(-geom_inner.xyz.min(0))
+#    geom_inner2.write('test2.xyz')
+    #for x in geom_inner.xyz - geom_inner2.xyz:
+    #    print(x)
+    print( np.absolute(geom_inner.xyz - geom_inner2.xyz).max() )
+    
+    # plt.figure()
+    # #HH1 = TSHS_n.sub(a_inner).tocsr(0)
+    # HH1 = H_tbtgf_i.copy()
+    # print(np.shape(HH1))
+    # plt.spy(HH1)
+    # plt.savefig('test1_H.png')
+
+    # plt.figure()
+    # #HH2 = new_HS_host.sub(a_dSE_host).tocsr(0)[:,:len(a_dSE_host)]
+    # HH2 = new_HS_host.sub(a_dSE_host).tocsr(0)[:,:len(a_dSE_host)]
+    # print(np.shape(HH2))
+    # plt.spy(HH2)
+    # plt.savefig('test2_H.png')
+
+    # plt.figure()
+    # HH3 = HH1-HH2
+    # print(HH3)
+    # plt.spy(HH3)
+    # plt.savefig('test3_H.png')
+
     if pzidx is not None:
-        geom_inner.atom[:] = si.Atom(1, R=r[-1]+dR); geom_inner.reduce()  # Necessary when going from DFT to TB
+        geom_inner.atom[:] = si.Atom(1, R=geom_inner.maxR()); geom_inner.reduce()  # Necessary when going from DFT to TB
+
     # Construct the TBTGF form
     Semi = si.Hamiltonian.fromsp(geom_inner, H_tbtgf_i, S_tbtgf_i)
     # It is vital that you also write an electrode Hamiltonian,
     # i.e. the Hamiltonian object passed as "Semi", has to be written:
     Semi.write('HS_SE_i.nc')
+    
     # Brillouin zone. In this case we will have a Gamma-only TBTGF!!!!!
-    kpts, wkpts = np.array([[0.,0.,0.]]), np.array([1.0])
-    BZ = si.BrillouinZone(TSHS_n); BZ._k = kpts; BZ._wk = wkpts
+    BZ = si.BrillouinZone(TSHS_n); BZ._k = np.array([[0.,0.,0.]]); BZ._w = np.array([1.0])
     # Now try and generate a TBTGF file
     GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
     GF.write_header(E, BZ, Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
@@ -383,7 +470,8 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
         # Prune H, S matrices from device region to outer region
         H_i = pruneMat(H_d, o_inner)
         S_i = pruneMat(S_d, o_inner)
-        #invG_i[pvl_inner, pvl_inner.T] += SE_ext
+#        H_i = Semi.Hk(format='array')
+#        S_i = Semi.Sk(format='array')
         if HS4GF:
             GF.write_hamiltonian(H_i, S_i)
         GF.write_self_energy(S_i*e - H_i - SE_i) 
@@ -492,7 +580,8 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
         else:
             Eindices = [TBT.Eindex(en) for en in energies]
         E = TBT.E[Eindices] + 1j*eta_value
-        
+        tbl = si.io.table.tableSile('contour.IN', 'w')
+        tbl.write_data(E.real, np.ones(len(E)), np.ones(len(E)), fmt='.8f')
         
         ############## initial TSHS w/o periodic boundary conditions
         print('Removing periodic boundary conditions')
