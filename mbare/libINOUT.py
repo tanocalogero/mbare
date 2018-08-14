@@ -418,6 +418,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     for i, (HS4GF, _, e) in enumerate(GF):
     #for i, e in enumerate(E):
         print('Doing E # {} of {}  ({} eV)'.format(i+1, len(E), e.real))  # Only for 1 kpt 
+        print('Doing E # {} of {}  ({} eV)'.format(i+1, len(E), e.real), file=open('log', 'a+'))  # Only for 1 kpt 
 
         # Read H and S from full TSHS (L+D+R) - no self-energies here!
         if TSHS_n.spin.is_polarized:
@@ -568,7 +569,6 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     new_HS_host.geom.write('HS_DEV.xyz')
     new_HS_host.geom.write('HS_DEV.fdf')
     new_HS_host.write('HS_DEV.nc')
-
     
     if useCAP:
         # Create dH | CAP
@@ -723,8 +723,13 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     for HS4GF, k, e in GF:
         if HS4GF:
             print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k))
+            print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k), 
+                file=open('log', 'a+'))
             ik+=1; ie=0
-        print('   Doing E # {} of {}  ({} eV)'.format(ie+1, len(E), e.real));  ie+=1
+        print('   Doing E # {} of {}  ({} eV)'.format(ie+1, len(E), e.real)) 
+        print('   Doing E # {} of {}  ({} eV)'.format(ie+1, len(E), e.real), 
+            file=open('log', 'a+'))
+        ie+=1
         
         # Read H and S from full TSHS (L+D+R) - no self-energies here!
         if TSHS_n.spin.is_polarized:
@@ -776,6 +781,14 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
         # One must write the quantity S_i*e - H_i - SE_i
         # Prune H, S matrices from device region to outer region
         H_i = pruneMat(H_d, o_inner)
+        #plt.figure()
+        #Hfullk2 = TSHS_n.Hk(klist[3], format='array')
+        #H_d2 = pruneMat(Hfullk2, o_dev)
+        #H_i2 = pruneMat(H_d2, o_inner)
+        #HH3 = H_i-H_i2
+        #print(np.amax(HH3))
+        #plt.spy(HH3)
+        #plt.savefig('testphases2.png')
         S_i = pruneMat(S_d, o_inner)
 #        H_i = Semi.Hk(format='array')
 #        S_i = Semi.Sk(format='array')
@@ -985,12 +998,14 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
         ################## Loop over E
         for i, (HS4GF, _, e) in enumerate(GF):
             print('Doing E = {} eV'.format(e.real))  # Only for 1 kpt 
+            print('Doing E = {} eV'.format(e.real), file=open('log', 'a+'))  # Only for 1 kpt 
             #Gssum_i = np.zeros((len(o_inner), len(o_inner)), np.complex128)
             Gssum_d = np.zeros((len(o_dev), len(o_dev)), np.complex128)
             
             ################## Loop over transverse k-points and average
             for ikpt, (kpt, wkpt) in enumerate(zip(klist, wklist)):        
                 print('Doing kpt # {} of {}  {}'.format(ikpt+1, len(klist), kpt))
+                print('Doing kpt # {} of {}  {}'.format(ikpt+1, len(klist), kpt), file=open('log', 'a+'))
                 # Read H and S from full TSHS (L+D+R) - no self-energies here!
                 if TSHS_n.spin.is_polarized:
                     Hfullk = TSHS.Hk(kpt, format='array', spin=spin)
