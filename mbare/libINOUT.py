@@ -64,27 +64,18 @@ def pruneMat_range(M, RMAX):
 def prune(HS, atoms, orb_idx, R=None):
     """
     HS:         [sisl non-orthogonal Hamiltonian object]
-    atoms:       [array] atoms whose orbitals will be extracted from DFT
+    atoms:      [array] atoms whose orbitals will be extracted from DFT
+                NB: It assumes that they are all the same species!  
     orb_idx:    [array int] orbital indices in HS basis to be extracted for each atom
     R:          [float] max range of interaction among orbs to be retained from HS 
     """
     ############################
-    # Create sub geometry from HS on "atoms" and with # orbitals = len(orb_idx)
-    g = HS.geom.sub(atoms); g.reduce()
-    a = si.Atom(g.atoms.Z[0], R=[g.maxR()]*len(orb_idx))
-    geom = si.Geometry(g.xyz, a, g.sc)
-    # Find sorted list of orbitals to extract from HS 
-    orbs = np.sort(np.concatenate([np.add.outer(HS.a2o(atoms), np.array([io])).ravel() 
-        for io in orb_idx])) 
-    # Extract orbs from HS
-    Hcsr, Scsr = HS.tocsr(0), HS.tocsr(HS.S_idx) 
-    Hcsr_orbs, Scsr_orbs = pruneMat(Hcsr, orbs), pruneMat(Scsr, orbs)
-    # Construct new TB Hamiltonian
-    HS_orbs = si.Hamiltonian.fromsp(geom, Hcsr_orbs, Scsr_orbs)
+    HS_orbs = HS.sub(atoms); HS_orbs.reduce()
+    HS_orbs = HS_orbs.sub(HS_orbs.atoms[0], orb_index=orb_idx)
     # Notice that this Hamiltonian preserves the full interaction range
     if R is not None:
         Hcsr_orbs_R, Scsr_orbs_R = pruneMat_range(HS_orbs, R)
-        HS_orbs_R = si.Hamiltonian.fromsp(geom, Hcsr_orbs_R, Scsr_orbs_R)
+        HS_orbs_R = si.Hamiltonian.fromsp(HS_orbs.geom, Hcsr_orbs_R, Scsr_orbs_R)
         return HS_orbs_R
     else:
         return HS_orbs
