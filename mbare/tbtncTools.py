@@ -732,7 +732,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
         a_Delta = a_Delta[np.in1d(a_Delta, atoms)]
     # Check
     v = TSHS.geom.copy(); v.atom[a_Delta] = si.Atom(8, R=[1.43]); v.write('a_Delta.xyz')
-    return a_Delta, a_int, Delta, area_int
+    return a_Delta, a_int, Delta, area_ext
 
 
 def makeTB(TSHS_0, pzidx, nn, WW, LL, elec=None, save=True, return_bands=False):
@@ -1471,14 +1471,14 @@ def makeTB_shifted(tshs, tbt, xyz_tip, TSHS_0, pzidx, nn, WW, LL, TSHS_elec,
     return HS_dev
 
 
-def plot_transmission(H, iE1, iE2, ymin=None, ymax=None, style='-', color='k', label=None):
+def plot_transmission(H, iE1, iE2, ymin=None, ymax=None, style='-', color='k', label=None, xshift=0, yshift=0):
     print('Plotting transmission from elec {} to elec {} in: {}'.format(iE1, iE2, H))
     H = si.get_sile(H)
     tr = H.transmission(H.elecs[iE1], H.elecs[iE2])
     
     ax = plt.gca()
 
-    ax.plot(H.E, tr, style, color=color, label=label)
+    ax.plot(H.E+xshift, tr+yshift, style, color=color, label=label)
     
     if ymin is None:
         ymin = ax.get_ylim()[0]
@@ -1491,14 +1491,14 @@ def plot_transmission(H, iE1, iE2, ymin=None, ymax=None, style='-', color='k', l
 
     return ax, tr
 
-def plot_transmission_bulk(H, iE, ymin=None, ymax=None, style='-', color='k', label=None):
+def plot_transmission_bulk(H, iE, ymin=None, ymax=None, style='-', color='k', label=None, xshift=0, yshift=0):
     print('Plotting bulk transmission from elec {} in: {}'.format(iE, H))
     H = si.get_sile(H)
     tr = H.transmission_bulk(H.elecs[iE])
 
     ax = plt.gca()
 
-    ax.plot(H.E, tr, style, color=color, label=label)
+    ax.plot(H.E+xshift, tr+yshift, style, color=color, label=label)
 
     if ymin is None:
         ymin = ax.get_ylim()[0]
@@ -1617,7 +1617,8 @@ class Groupby:
 
 def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True, scale='raw', xyz_origin=None,
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
-    lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, spsite=None):   
+    lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
+    spsite=None, dpi=180):   
     """ 
     atoms must be 0-based
     """
@@ -1774,7 +1775,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True,
             print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))
     
 
-    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=180)
+    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=dpi)
     print('Successfully plotted to "{}"'.format(figname))
     print('Done in {} sec'.format(time.time() - t))
 
@@ -1783,7 +1784,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True,
 
 def plot_bondcurrents_old(f, idx_elec, sum='+', E=0.0,  k='avg', f_bg=None, percent_bg=False, 
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
-    lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None):   
+    lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, dpi=180):   
     """ 
     atoms must be 0-based
     """
@@ -1961,7 +1962,7 @@ def plot_bondcurrents_old(f, idx_elec, sum='+', E=0.0,  k='avg', f_bg=None, perc
             print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))
     
 
-    plt.savefig(figname, bbox_inches='tight', dpi=180)
+    plt.savefig(figname, bbox_inches='tight', dpi=dpi)
     print('Successfully plotted to "{}"'.format(figname))
     print('Done in {} sec'.format(time.time() - t))
 
@@ -2148,7 +2149,7 @@ def mask_interpolate(coords, values, a=None, method='nearest', oversampling=300)
 
 
 def plot_ADOS(f, idx_elec, E=0.0, k='avg', sum=False, vmin=None, vmax=None, log=False, map=False, 
-    lattice=False, ps=20, atoms=None, out=None, zaxis=2, spsite=None, scale='raw'):
+    lattice=False, ps=20, atoms=None, out=None, zaxis=2, spsite=None, scale='raw', dpi=180):
 
     t = time.time()
     print('\n***** ADOS (2D map) *****\n')    
@@ -2245,14 +2246,15 @@ def plot_ADOS(f, idx_elec, E=0.0, k='avg', sum=False, vmin=None, vmax=None, log=
         axcb.ax.set_yticklabels(['{:.3e}'.format(vmin), '{:.3e}'.format(vmax)])
         print('MIN bc among selected atoms (in final plot) = {}'.format(vmin))
         print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))
-    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=300)
+    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=dpi)
     print('Successfully plotted to "{}"'.format(figname))
     print('Done in {} sec'.format(time.time() - t))
 
 
 
 
-def plot_ADOS_stripe(geom, ai_list, ADOS, x, y, i_list, figname='ADOS_x.png', E=0.0, vmin=None, vmax=None):
+def plot_ADOS_stripe(geom, ai_list, ADOS, x, y, i_list, figname='ADOS_x.png', E=0.0, 
+    vmin=None, vmax=None, dpi=180):
     
     import matplotlib.collections as collections
     from matplotlib.colors import LogNorm
@@ -2286,7 +2288,7 @@ def plot_ADOS_stripe(geom, ai_list, ADOS, x, y, i_list, figname='ADOS_x.png', E=
     cax = divider.append_axes("right", size="5%", pad=0.05)
     axcb = plt.colorbar(image, cax=cax, format='%1.2f', ticks=[vmin, vmax])
 
-    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=300)
+    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=dpi)
     print('Successfully plotted to "{}"'.format(figname))
 
 
@@ -2320,7 +2322,7 @@ def plot_collimation_factor(X, Y, const=None, const2=None, E=0.0):
 
 
     plt.gcf()
-    plt.savefig('BoA_E{:.2f}.png'.format(E), bbox_inches='tight', transparent=True, dpi=300)
+    plt.savefig('BoA_E{:.2f}.png'.format(E), bbox_inches='tight', transparent=True, dpi=dpi)
 
 
 

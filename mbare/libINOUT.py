@@ -61,6 +61,22 @@ def pruneMat_range(M, RMAX):
     Mcsr2.eliminate_zeros()
     return Mcsr1, Mcsr2
 
+########   Never tested!!!
+def pruneMat_cutoff(M, CMAX):
+    """
+    M:      Hamiltonian object
+    CMAX:   Cutoff for elements to be retained
+    """
+    Mcsr1, Mcsr2 = M.tocsr(0), M.tocsr(M.S_idx)
+    mask1 = Mcsr1 > CMAX
+    mask2 = Mcsr2 > CMAX
+    Mcsr1[mask1] = 0
+    Mcsr1.eliminate_zeros()
+    Mcsr2[mask2] = 0
+    Mcsr2.eliminate_zeros()
+    return Mcsr1, Mcsr2
+########
+
 def prune(HS, atoms, orb_idx, R=None):
     """
     HS:         [sisl non-orthogonal Hamiltonian object]
@@ -94,7 +110,7 @@ def rearrange(HS, list, where='end'):
 
     return list_new, HS_new
 
-def map_xyz(A, B, area_Delta, a_Delta=None, center_B=None, pos_B=None, area_int_for_buffer=None, 
+def map_xyz(A, B, area_Delta, a_Delta=None, center_B=None, pos_B=None, area_for_buffer=None, 
     tol=None):
     ### FRAME
     print('Mapping from DELTA in DFT geometry to THETA in host geometry')
@@ -178,15 +194,15 @@ try to set `pos_B` to `B.center(what=\'xyz\') + [dx,dy,dz]`. Or increase the tol
     print("\nSelected atoms mapped into host geometry, after rearrangement\n\
 at the end of the coordinates list (1-based): {}\n{}".format(len(a_Theta_rearranged), list2range_TBTblock(a_Theta_rearranged)))
 
-
     # Find and print buffer atoms
-    if area_int_for_buffer is not None:
-        ### FRAME
+    if area_for_buffer is not None:
         # NB: that cuboids are always independent from the sorting in the host geometry
-        area_int_B = area_int_for_buffer.copy()
+        area_B = area_for_buffer.copy()
         if center_B is not None:
-            area_int_B.set_center(center_B)
-        buffer = area_int_B.within_index(new_B.xyz)
+            area_B.set_center(center_B)
+        almostbuffer = area_B.within_index(new_B.xyz)
+        buffer_i = np.in1d(almostbuffer, a_Theta_rearranged, assume_unique=True, invert=True)
+        buffer = almostbuffer[buffer_i]
         # Write buffer atoms fdf block
         print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(buffer), list2range_TBTblock(buffer)))
         v = new_B.geom.copy(); v.atom[buffer] = si.Atom(8, R=[1.44]); v.write('buffer.xyz')
@@ -283,7 +299,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
     a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
-        area_Delta=area_Delta, a_Delta=a_inner, area_int_for_buffer=area_int, tol=tol)
+        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_int, tol=tol)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
@@ -554,7 +570,7 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
     a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
-        area_Delta=area_Delta, a_Delta=a_inner, area_int_for_buffer=area_int, tol=tol)
+        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_int, tol=tol)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
@@ -872,7 +888,7 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
     a_dSE_host, sorted_HS_host = map_xyz(A=TSHS, B=HS_host, pos_B=pos_dSE, 
-        area_Delta=area_Delta, area_int_for_buffer=area_int, tol=tol)
+        area_Delta=area_Delta, area_for_buffer=area_int, tol=tol)
     v = sorted_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('inside_a_dSE_host.xyz')
     sorted_HS_host.write('inside_HS_DEV_periodic.nc')
     
