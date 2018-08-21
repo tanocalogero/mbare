@@ -68,8 +68,8 @@ def pruneMat_cutoff(M, CMAX):
     CMAX:   Cutoff for elements to be retained
     """
     Mcsr1, Mcsr2 = M.tocsr(0), M.tocsr(M.S_idx)
-    mask1 = Mcsr1 > CMAX
-    mask2 = Mcsr2 > CMAX
+    mask1 = np.absolute(Mcsr1) > CMAX
+    mask2 = np.absolute(Mcsr2) > CMAX
     Mcsr1[mask1] = 0
     Mcsr1.eliminate_zeros()
     Mcsr2[mask2] = 0
@@ -215,8 +215,8 @@ at the end of the coordinates list (1-based): {}\n{}".format(len(a_Theta_rearran
 
 
 def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
-    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, TBTSE=None,
-    useCAP=None, spin=0, tol=None):
+    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, area_for_buffer=None,  
+    TBTSE=None, useCAP=None, spin=0, tol=None):
     """
     TSHS:                   TSHS from perturbed DFT system
     TSHS_0:                 TSHS from reference unperturbed DFT system
@@ -231,7 +231,8 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     pzidx (=None):          idx of orbital per atom to be extracted from TSHS, in case HS_host has a reduced basis size
     pos_dSE (=0):           center of region where \Sigma atoms should be placed in HS_host 
     area_Delta (=None):     si.shape.Cuboid object used to select "a_Delta" atoms in TSHS
-    area_int (=None):       si.shape.Cuboid object used to select "a_outer" atoms in TSHS
+    area_int (=None):              internal si.shape.Cuboid object used to construct area_Delta in TSHS
+    area_for_buffer (=None):       external si.shape.Cuboid object used to used to construct area_Delta in TSHS
     TBTSE (=None):          *TBT.SE.nc file of self-energy enclosed by the atoms "a_inner" in TSHS (e.g., tip) 
     useCAP (=None):         use 'left+right+top+bottom' to set complex absorbing potential in all in-plane directions
     
@@ -298,8 +299,11 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     # Map a_inner into host geometry (which includes electrodes!)
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
+    if area_for_buffer is None:
+        area_for_buffer = area_int.copy()
+        print("WARNING: You didn't provide 'area_for_buffer'. \n We are setting it to 'area_int'. Please check that it is completely correct by comparing 'a_dSE_host.xyz' and 'buffer.xyz'")
     a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
-        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_int, tol=tol)
+        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
@@ -486,8 +490,8 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 
 def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
-    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, TBTSE=None,
-    useCAP=None, spin=0, tol=None, PBCdir=0, kmesh=None, kfromfile=True, usetrs=True):
+    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, area_for_buffer=None, 
+    TBTSE=None, useCAP=None, spin=0, tol=None, PBCdir=0, kmesh=None, kfromfile=True, usetrs=True):
     """
     TSHS:                   TSHS from perturbed DFT system
     TSHS_0:                 TSHS from reference unperturbed DFT system
@@ -502,7 +506,8 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     pzidx (=None):          idx of orbital per atom to be extracted from TSHS, in case HS_host has a reduced basis size
     pos_dSE (=0):           center of region where \Sigma atoms should be placed in HS_host 
     area_Delta (=None):     si.shape.Cuboid object used to select "a_Delta" atoms in TSHS
-    area_int (=None):       si.shape.Cuboid object used to select "a_outer" atoms in TSHS
+    area_int (=None):              internal si.shape.Cuboid object used to construct area_Delta in TSHS
+    area_for_buffer (=None):       external si.shape.Cuboid object used to used to construct area_Delta in TSHS
     TBTSE (=None):          *TBT.SE.nc file of self-energy enclosed by the atoms "a_inner" in TSHS (e.g., tip) 
     useCAP (=None):         use 'left+right+top+bottom' to set complex absorbing potential in all in-plane directions
     
@@ -569,8 +574,11 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     # Map a_inner into host geometry (which includes electrodes!)
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
+    if area_for_buffer is None:
+        area_for_buffer = area_int.copy()
+        print("WARNING: You didn't provide 'area_for_buffer'. \n We are setting it to 'area_int'. Please check that it is completely correct by comparing 'a_dSE_host.xyz' and 'buffer.xyz'")
     a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
-        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_int, tol=tol)
+        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
@@ -807,7 +815,7 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
-    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, 
+    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_for_buffer=None, 
     TBTSE=None, spin=0, reuse_SE=False, tol=None, PBCdir=0, kmesh=None, kfromfile=True, 
     elecnames=['Left', 'Right']):
     """
@@ -888,7 +896,7 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
     a_dSE_host, sorted_HS_host = map_xyz(A=TSHS, B=HS_host, pos_B=pos_dSE, 
-        area_Delta=area_Delta, area_for_buffer=area_int, tol=tol)
+        area_Delta=area_Delta, area_for_buffer=area_for_buffer, tol=tol)
     v = sorted_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('inside_a_dSE_host.xyz')
     sorted_HS_host.write('inside_HS_DEV_periodic.nc')
     
