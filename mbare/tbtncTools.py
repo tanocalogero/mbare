@@ -8,6 +8,10 @@ import math, time
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from itertools import groupby
+try:
+    from itertools import izip as zip
+except:
+    pass
 import sisl as si
 from numbers import Integral
 
@@ -1631,15 +1635,18 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True,
     bc, energy, geom = read_bondcurrents(f, idx_elec, only, E, k)
 
     # If needed, select only selected atoms from bc_bg.
+    bc_coo = bc.tocoo()
+    i_list, j_list, bc_list = bc_coo.row, bc_coo.col, bc_coo.data
     if atoms is None:
         print('Reading bond-currents among all atoms in device region')
         atoms = nc.a_dev
-        i_list, j_list, bc_list = bc.tocoo().row, bc.tocoo().col, bc.tocoo().data
+        del bc_coo
     else:
-        if atoms[0] < 0:
-            # if atoms is a list of negative numbers, use all atoms except them
-            atoms = list(set(nc.a_dev).difference(set(-np.asarray(atoms))))
-        i_list, j_list, bc_list = bc_sub(bc, atoms)
+        # Only choose atoms with positive indices
+        atoms = atoms[atoms >= 0]
+        select = np.logical_and(np.in1d(i_list, atoms), np.in1d(j_list, atoms))
+        i_list, j_list, bc_list = i_list[select], j_list[select], bc_list[select]
+        del bc_coo, select
 
     print('Number of bond-current entries: {}'.format(np.shape(bc_list)))
     print('MIN bc among selected atoms (from file) = {}'.format(np.min(bc_list)))
@@ -1677,25 +1684,14 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True,
 
     if avg:
         # Plot bond currents as avg 2D map
-        isort = np.argsort(i_list)
-        i_s = i_list[isort]
-        bc_s = bc_list[isort]
-        iu, iu_i, iu_c = np.unique(i_s, return_index=True, return_counts=True)
-        
-        # The two definitions below are equivalent and super fast
-        bc_avg = np.array([np.sum(bc_s[a:(a+b)]) for a, b in zip(iu_i, iu_c)])
-        #bc_avg = Groupby(i_s).apply(np.average, bc_s, broadcast=True)[iu_i]
-        # Below is average rater than sum. 
-        # These give similar results for large systems, but sum is better.
-        # Check article/thesis
-        #bc_avg = np.array([np.average(bc_s[a:(a+b)]) for a, b in zip(iu_i, iu_c)])
-        #bc_avg = Groupby(i_s).apply(np.average, bc_s, broadcast=True)[iu_i]
+        atoms_sort = np.sort(atoms)
+        bc_avg = bc.sum(1).A.ravel()[atoms_sort]
 
         if scale is 'radial':
-            _, r = geom.close_sc(xyz_origin, R=np.inf, idx=iu, ret_rij=True)
+            _, r = geom.close_sc(xyz_origin, R=np.inf, idx=atoms_sort, ret_rij=True)
             bc_avg = np.multiply(bc_avg, r)
 
-        x, y = geom.xyz[iu, xaxis], geom.xyz[iu, yaxis]
+        x, y = geom.xyz[atoms_sort, xaxis], geom.xyz[atoms_sort, yaxis]
 
         if scale is '%':
             if vmin is None:
@@ -1728,8 +1724,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True,
             .5*(geom.xyz[i_list, yaxis]+geom.xyz[j_list, yaxis]))
         line_list = list(map(list, zip(start_list, half_end_list)))     # segments length = 1/2 bonds length
         linewidths = lw * bc_list / np.max(bc_list)     
-        lattice_bonds = collections.LineCollection(line_list, 
-            cmap=cmap, linewidths=linewidths, norm=norm)
+        lattice_bonds = collections.LineCollection(line_list, cmap=cmap, linewidths=linewidths, norm=norm)
         lattice_bonds.set_array(bc_list/np.amax(bc_list))
         lattice_bonds.set_clim(vmin/np.amax(bc_list), vmax/np.amax(bc_list))
         ax.add_collection(lattice_bonds)
