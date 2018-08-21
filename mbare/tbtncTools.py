@@ -736,7 +736,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
         a_Delta = a_Delta[np.in1d(a_Delta, atoms)]
     # Check
     v = TSHS.geom.copy(); v.atom[a_Delta] = si.Atom(8, R=[1.43]); v.write('a_Delta.xyz')
-    return a_Delta, a_int, Delta, area_ext
+    return a_Delta, a_int, Delta, area_ext, area_int
 
 
 def makeTB(TSHS_0, pzidx, nn, WW, LL, elec=None, save=True, return_bands=False):
