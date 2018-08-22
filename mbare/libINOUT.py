@@ -715,7 +715,7 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
             print('Please provide "kmesh", or set "kfromfile" to True to use kpts from {}'.format(TBT))
             print('Bye...'); exit(1)
         print('User provided kpoints mesh: {}'.format(kmesh))
-        mp = si.MonkhorstPack(TSHS.geom, kmesh)
+        mp = si.MonkhorstPack(TSHS.geom, kmesh, trs=usetrs)
         klist = mp.k
         wklist = mp.weight
     print('List of selected kpoints | weights:')
@@ -812,6 +812,328 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
         GF.write_self_energy(S_i*e - H_i - SE_i) 
 
 
+def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
+    HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, area_for_buffer=None, 
+    TBTSE=None, useCAP=None, spin=0, tol=None, PBCdir=0, kmesh=None, kfromfile=True, usetrs=True):
+    """
+    TSHS:                   TSHS from perturbed DFT system
+    TSHS_0:                 TSHS from reference unperturbed DFT system
+    a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
+                            \Sigma will live on these atoms
+    eta_value:              imaginary part in Green's function
+    energies:               energy in eV for which \Sigma should be computed (closest E in TBT will be used )
+    TBT:                    *.TBT.nc (or *.TBT.SE.nc) from a TBtrans calc. where TBT.HS = TSHS 
+    HS_host:                host (H, S) model (e.g. a large TB model of unperturbed system). 
+                            Coordinates of atoms "a_inner" in TSHS will be mapped into this new model.
+                            Atomic order will be adjusted so that mapped atoms will be consecutive and at the end of the list   
+    pzidx (=None):          idx of orbital per atom to be extracted from TSHS, in case HS_host has a reduced basis size
+    pos_dSE (=0):           center of region where \Sigma atoms should be placed in HS_host 
+    area_Delta (=None):     si.shape.Cuboid object used to select "a_Delta" atoms in TSHS
+    area_int (=None):              internal si.shape.Cuboid object used to construct area_Delta in TSHS
+    area_for_buffer (=None):       external si.shape.Cuboid object used to used to construct area_Delta in TSHS
+    TBTSE (=None):          *TBT.SE.nc file of self-energy enclosed by the atoms "a_inner" in TSHS (e.g., tip) 
+    useCAP (=None):         use 'left+right+top+bottom' to set complex absorbing potential in all in-plane directions
+    
+    Important output files:
+    "HS_DEV.nc":        HS file for TBtrans (to be used with "TBT.HS" flag)
+                        this Hamiltonian is identical to HS_host, but it has no PBC 
+                        and \Sigma projected atoms are moved to the end of the atom list   
+    "SE_i.delta.nc":    \Delta \Sigma file for TBtrans (to be used as "TBT.dSE" flag)
+                        it will contain \Sigma from k-averaged Green's function from TSHS,
+                        projected on the atoms "a_inner" equivalent atoms of HS_host
+    "SE_i.TBTGF":       Green's function file for usage as electrode in TBtrans 
+                        (to be used with "GF" flag in the electrode block for \Sigma)
+                        it will contain S^{noPBC}*e - H^{noPBC} - \Sigma from TSHS k-averaged Green's function,
+                        projected on the atoms "a_inner" equivalent atoms of HS_host    
+    "HS_SE_i.nc":       electrode HS file for usage of TBTGF as electrode in TBtrans
+                        (to be used with "HS" flag in the electrode block for \Sigma)
+    """
+
+    dR = 0.005
+
+    # a_dev from *TBT.nc and TBT.SE.nc is not sorted correctly in older versions of tbtrans!!! 
+    #a_dev = TBT.a_dev
+    a_dev = np.sort(TBT.a_dev)
+    a_inner = np.sort(a_inner)
+
+    # Find indices of atoms and orbitals in device region 
+    o_dev = TSHS.a2o(a_dev, all=True)
+
+    # Check it's carbon atoms in inner
+    for ia in a_inner:
+        if TSHS.atom[ia].Z != 6:
+            print('\nERROR: please select C atoms in inner region \n')
+            exit(1)
+
+    # Define inner region INSIDE the device region
+    if pzidx is not None:
+        # Selected 'pzidx' orbitals inside inner region   
+        print('WARNING: you are selecting only orbital index \'{}\' in inner region'.format(pzidx))
+        o_inner = TSHS.a2o(a_inner) + pzidx  # these are pz indices in the full L+D+R geometry 
+    else:
+        # ALL orbitals inside inner region
+        o_inner = TSHS.a2o(a_inner, all=True)  # these are ALL orbitals indices in the full L+D+R geometry
+    # Same atoms but w.r.t. device region 
+    o_inner = np.in1d(o_dev, o_inner).nonzero()[0]
+
+    # We will consider ALL orbitals of ALL atoms enclosed by the frame
+    vv = TSHS.geom.sub(a_dev)
+    a_outer_tmp = area_int.within_index(vv.xyz)
+    o_outer = vv.a2o(a_outer_tmp, all=True)  # these are ALL orbitals indices in the outer region
+
+    # Check
+    v = TSHS.geom.copy()
+    v.atom[v.o2a(o_dev, uniq=True)] = si.Atom(8, R=[1.44])
+    v.write('o_dev.xyz')
+    # Check
+    vv = TSHS.geom.sub(a_dev)
+    vv.atom[vv.o2a(o_inner, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.write('o_inner.xyz')
+    # Check
+    vv = TSHS.geom.sub(a_dev)
+    vv.atom[vv.o2a(o_outer, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.write('o_outer.xyz')
+
+    # Map a_inner into host geometry (which includes electrodes!)
+    # WARNING: we will now rearrange the atoms in the host geometry
+    # putting the mapped ones at the end of the coordinates list
+    if area_for_buffer is None:
+        area_for_buffer = area_int.copy()
+        print("WARNING: You didn't provide 'area_for_buffer'. \n We are setting it to 'area_int'. Please check that it is completely correct by comparing 'a_dSE_host.xyz' and 'buffer.xyz'")
+    a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
+        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
+    v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
+    # Write final host model
+    new_HS_host.geom.write('HS_DEV.xyz')
+    new_HS_host.geom.write('HS_DEV.fdf')
+    new_HS_host.write('HS_DEV.nc')
+    
+    if useCAP:
+        # Create dH | CAP
+        dH_CAP = CAP(new_HS_host.geom, useCAP, dz_CAP=50, write_xyz=True)
+        dH_CAP_sile = si.get_sile('CAP.delta.nc', 'w')
+        dH_CAP_sile.write_delta(dH_CAP)
+
+    # Energy grid
+    if isinstance(energies[0], int):
+        Eindices = list(energies)
+    else:
+        Eindices = [TBT.Eindex(en) for en in energies]
+    E = TBT.E[Eindices] + 1j*eta_value
+    tbl = si.io.table.tableSile('contour.IN', 'w')
+    tbl.write_data(E.real, np.zeros(len(E)), np.ones(len(E)), fmt='.8f')
+
+    # Here we remove periodic boundary conditions
+    TSHS_n = TSHS.copy()
+    print('Removing periodic boundary conditions')
+    TSHS_n.set_nsc([1]*3)
+    
+    ##### Setup dSE
+    print('Initializing dSE file...')
+    o_dSE_host = new_HS_host.a2o(a_dSE_host, all=True).reshape(-1, 1)  # this has to be wrt L+D+R host geometry
+    dSE = si.get_sile('SE_i.delta.nc', 'w')
+    
+    ##### Setup TBTGF
+    print('Initializing TBTGF files...')
+    # This is needed already here because of TBTGF (only @ Gamma!)
+#    new = new_HS_host.copy()
+#    new.set_nsc([1,1,1])
+#    Semi = new.sub(a_dSE_host)
+    # H_tbtgf = new_HS_host.Hk(dtype=np.float64)
+    # S_tbtgf = new_HS_host.Sk(dtype=np.float64)
+    # H_tbtgf_i = pruneMat(H_tbtgf, o_dSE_host)
+    # S_tbtgf_i = pruneMat(S_tbtgf, o_dSE_host)
+
+    if TSHS_n.spin.is_polarized:
+        H_tbtgf = TSHS_n.Hk(dtype=np.float64, spin=spin)
+    else:
+        H_tbtgf = TSHS_n.Hk(dtype=np.float64)
+    S_tbtgf = TSHS_n.Sk(dtype=np.float64)
+    print(' Hk and Sk: DONE')
+    # Prune to dev region
+    H_tbtgf_d = pruneMat(H_tbtgf, o_dev)
+    S_tbtgf_d = pruneMat(S_tbtgf, o_dev)
+    # Prune matrices from device region to inner region
+    H_tbtgf_i = pruneMat(H_tbtgf_d, o_inner)
+    S_tbtgf_i = pruneMat(S_tbtgf_d, o_inner)
+#    # Create a geometry (one orb per atom, if DFT2TB) containing only inner atoms
+    #r = get_dft_param(TSHS_0, 0, pzidx, pzidx, unique=True, onlynnz=True)[0]
+    #g = si.geom.graphene(r[1], orthogonal=True)
+    
+    #g = si.geom.graphene(1.44, orthogonal=True)
+    #geom_dev = TSHS_n.geom.sub(a_dev)
+    #geom_dev = geom_dev.translate(-geom_dev.xyz[0, :])
+    #geom_dev.set_sc(g.sc.fit(geom_dev))
+    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, uniq=True))
+    #geom_inner = geom_inner.translate(-geom_inner.xyz[0, :])
+    #geom_inner.set_sc(g.sc.fit(geom_inner))
+
+    geom_inner2 = TSHS_n.geom.sub(a_inner)
+    geom_inner2 = geom_inner2.translate(-geom_inner2.xyz.min(0))
+    #geom_inner.write('test1.xyz')
+    
+    #geom_inner = new_HS_host.geom.sub(a_dSE_host)
+    geom_inner = new_HS_host.geom.sub(a_dSE_host)
+    geom_inner = geom_inner.translate(-geom_inner.xyz.min(0))
+#    geom_inner2.write('test2.xyz')
+    #for x in geom_inner.xyz - geom_inner2.xyz:
+    #    print(x)
+    print( np.absolute(geom_inner.xyz - geom_inner2.xyz).max() )
+    
+    # plt.figure()
+    # #HH1 = TSHS_n.sub(a_inner).tocsr(0)
+    # HH1 = H_tbtgf_i.copy()
+    # print(np.shape(HH1))
+    # plt.spy(HH1)
+    # plt.savefig('test1_H.png')
+
+    # plt.figure()
+    # #HH2 = new_HS_host.sub(a_dSE_host).tocsr(0)[:,:len(a_dSE_host)]
+    # HH2 = new_HS_host.sub(a_dSE_host).tocsr(0)[:,:len(a_dSE_host)]
+    # print(np.shape(HH2))
+    # plt.spy(HH2)
+    # plt.savefig('test2_H.png')
+
+    # plt.figure()
+    # HH3 = HH1-HH2
+    # print(HH3)
+    # plt.spy(HH3)
+    # plt.savefig('test3_H.png')
+
+    if pzidx is not None:
+        geom_inner.atom[:] = si.Atom(1, R=geom_inner.maxR()); geom_inner.reduce()  # Necessary when going from DFT to TB
+
+    # Construct the TBTGF form
+    Semi = si.Hamiltonian.fromsp(geom_inner, H_tbtgf_i, S_tbtgf_i)
+    # It is vital that you also write an electrode Hamiltonian,
+    # i.e. the Hamiltonian object passed as "Semi", has to be written:
+    Semi.write('HS_SE_i.nc')
+    
+    # In principle we can average G over a different kpt grid than a one that you would
+    # use for a standard tbtrans calculation. 
+    # So here we allow the user to define it from scratch.
+    # By default we use time-reversal symmetry.
+    # If no kmesh is provided, then we read it from TBT.
+    #   WARNING: TBT might not contain a good grid. 
+    #   Always check that the kpoint selected are OK!!!
+    if kfromfile:
+        # If there is only one periodic direction, one just needs to set PBCdir
+        if kmesh is None:
+            kmesh = list(np.ones(3, dtype=np.int8))
+            kmesh[PBCdir] = TBT.nkpt
+        print('Reading {} kpoints from {}'.format(kmesh, TBT))
+        # If usetrs is True, then restore TRS if absent from file
+        # We leave this chance open because the user might want to 
+        # use this TBTGF file in a tbtrans calculation where trs should not be used (e.g. bond-currents) 
+        if (TBT.kpt < 0.).any():
+            print('Time reversal symmetry can be used in file. Here usetrs is set to {}.'.format(str(usetrs)))
+            mp = si.MonkhorstPack(TSHS.geom, kmesh, trs=usetrs)
+            klist = mp.k
+            wklist = mp.weight
+        else:
+            klist = TBT.kpt
+            wklist = TBT.wkpt
+            mp = si.BrillouinZone(TSHS_n); BZ._k = klist; BZ._w = wklist
+    else:
+        if kmesh is None:
+            print('Please provide "kmesh", or set "kfromfile" to True to use kpts from {}'.format(TBT))
+            print('Bye...'); exit(1)
+        print('User provided kpoints mesh: {}'.format(kmesh))
+        mp = si.MonkhorstPack(TSHS.geom, kmesh, trs=usetrs)
+        klist = mp.k
+        wklist = mp.weight
+    print('List of selected kpoints | weights:')
+    for j1,j2 in zip(klist, wklist):
+        print('  {}\t{}'.format(j1,j2))
+
+    # Now try and generate a TBTGF file
+    GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
+    GF.write_header(E, mp, Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
+    ###############
+    
+    # if there's a self energy enclosed by the frame
+    if TBTSE:
+        pv = TBTSE.pivot('tip', in_device=True, sort=True).reshape(-1, 1)
+        pv_outer = np.in1d(o_outer, pv.reshape(-1, )).nonzero()[0].reshape(-1, 1)
+
+
+    print('\nComputing and storing Sigma in TBTGF and dSE format...')
+    ik=0
+    for HS4GF, k, e in GF:
+        if HS4GF:
+            print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k))
+            print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k), 
+                file=open('log', 'a+'))
+            ik+=1; ie=0
+        print('   Doing E # {} of {}  ({} eV)'.format(ie+1, len(E), e.real)) 
+        print('   Doing E # {} of {}  ({} eV)'.format(ie+1, len(E), e.real), 
+            file=open('log', 'a+'))
+        ie+=1
+        
+        # Read H and S from full TSHS (L+D+R) - no self-energies here!
+        if TSHS_n.spin.is_polarized:
+            Hfullk = TSHS_n.Hk(format='array', spin=spin)
+        else:
+            Hfullk = TSHS_n.Hk(format='array')
+        Sfullk = TSHS_n.Sk(format='array')
+
+        # Prune H, S to device region
+        H_d = pruneMat(Hfullk, o_dev)
+        S_d = pruneMat(Sfullk, o_dev)
+
+        # Prune H, S matrices from device region to outer region
+        H_o = pruneMat(H_d, o_outer)
+        S_o = pruneMat(S_d, o_outer)
+        #figure(); im = imshow(H_o.real, cmap='viridis', interpolation='none'); colorbar(im)
+        #savefig('H_o.real.png', dpi=200)
+        #figure(); im = imshow(S_o.real, cmap='viridis', interpolation='none'); colorbar(im)
+        #savefig('S_o.real.png', dpi=200)
+
+        # Coupling matrix from inner to outer (o x i)
+        V_oi = couplingMat(H_d, o_outer, o_inner)
+        #figure(); im = imshow(V_oi.real, cmap='viridis', interpolation='none'); colorbar(im)
+        #savefig('V_oi.real.png', dpi=200)
+
+        invG_o = S_o*e - H_o 
+
+        # if there's a self energy enclosed by the frame
+        if TBTSE:
+            SE_ext = TBTSE.self_energy('tip', E=e.real, k=[0.,0.,0.], sort=True)
+            invG_o[pv_outer, pv_outer.T] -= SE_ext
+
+        G_o = np.linalg.inv(invG_o)
+        
+        # Self-energy in inner, connecting inner to outer (i x i)
+        SE_i = np.dot(np.dot(dagger(V_oi), G_o), V_oi)
+        #figure(); im = imshow(SE_i.real, cmap='viridis', interpolation='none'); colorbar(im)
+        #savefig('SE_i.real.png', dpi=200)
+        #figure(); im = imshow(SE_i.imag, cmap='viridis', interpolation='none'); colorbar(im)
+        #savefig('SE_i.imag.png', dpi=200)
+        
+        # Write Sigma as a dSE file 
+        Sigma_in_HS_host = sp.sparse.csr_matrix((len(new_HS_host), len(new_HS_host)), dtype=np.complex128)
+        Sigma_in_HS_host[o_dSE_host, o_dSE_host.T] = SE_i
+        delta_Sigma = si.Hamiltonian.fromsp(new_HS_host.geom, Sigma_in_HS_host)
+        dSE.write_delta(delta_Sigma, k=k, E=e.real)
+
+        # Write Sigma as TBTGF
+        # One must write the quantity S_i*e - H_i - SE_i
+        # Prune H, S matrices from device region to outer region
+        H_i = pruneMat(H_d, o_inner)
+        #plt.figure()
+        #Hfullk2 = TSHS_n.Hk(klist[3], format='array')
+        #H_d2 = pruneMat(Hfullk2, o_dev)
+        #H_i2 = pruneMat(H_d2, o_inner)
+        #HH3 = H_i-H_i2
+        #print(np.amax(HH3))
+        #plt.spy(HH3)
+        #plt.savefig('testphases2.png')
+        S_i = pruneMat(S_d, o_inner)
+#        H_i = Semi.Hk(format='array')
+#        S_i = Semi.Sk(format='array')
+        if HS4GF:
+            GF.write_hamiltonian(H_i, S_i)
+        GF.write_self_energy(S_i*e - H_i - SE_i) 
 
 
 def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
