@@ -203,15 +203,87 @@ at the end of the coordinates list (1-based): {}\n{}".format(len(a_Theta_rearran
         almostbuffer = area_B.within_index(new_B.xyz)
         buffer_i = np.in1d(almostbuffer, a_Theta_rearranged, assume_unique=True, invert=True)
         buffer = almostbuffer[buffer_i]
-        # Write buffer atoms fdf block
-        print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(buffer), list2range_TBTblock(buffer)))
-        v = new_B.geom.copy(); v.atom[buffer] = si.Atom(8, R=[1.44]); v.write('buffer.xyz')
-        with open('block_buffer.fdf', 'w') as fb:
-            fb.write("%block TBT.Atoms.Buffer\n")
-            fb.write(list2range_TBTblock(buffer))    
-            fb.write("\n%endblock\n")
 
-    return a_Theta_rearranged, new_B
+    return a_Theta_rearranged, new_B, buffer
+
+
+def rearrange_H(TSHS, a_inner, HS_host, pos_dSE=None, 
+    area_Delta=None, area_int=None, area_for_buffer=None, tol=None):
+
+    a_inner = np.sort(a_inner)
+    # Check it's carbon atoms in inner
+    for ia in a_inner:
+        if TSHS.atom[ia].Z != 6:
+            print('\nERROR: please select C atoms in inner region \n')
+            exit(1)
+
+    # Map a_inner into host geometry (which includes electrodes!)
+    # WARNING: we will now rearrange the atoms in the host geometry
+    # putting the mapped ones at the end of the coordinates list
+    if area_for_buffer is None:
+        area_for_buffer = area_int.copy()
+        print("WARNING: You didn't provide 'area_for_buffer'. \n We are setting it to 'area_int'. Please check that it is completely correct by comparing 'a_dSE_host.xyz' and 'buffer.xyz'")
+    a_dSE_host, new_HS_host, buf = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
+        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
+    
+    return new_HS_host, a_dSE_host, buf
+
+
+def construct_modular(TSHS, H0, modules, positions):
+    """
+    TSHS:       Hamiltonian from DFT, needed to recover the input coordinates to map
+    H0:         Host TB model to be rearranged. Modules will be progressively appended
+                at the end of atomic list
+    modules:    list of tuples (a_Delta, Delta, area_ext, area_int) as those obtained 
+                from tbtncTools.Delta provide one tuple for each module
+    positions:  list of xyz object (ndarray with shape=(1,3)) in H0 corresponding to
+                the center of mass of each module provide one xyz for each module
+
+    EXAMPLE OF USAGE:
+        from tbtncTools import Delta
+        a_Delta, _, Delta, area_ext, area_int = Delta(TSHS, shape='Cuboid', z_graphene=TSHS.xyz[0, 2], 
+            thickness=10., ext_offset=tshs_0.cell[1,:].copy(), zaxis=2, atoms=C_list)
+        frame_tip = (a_Delta, Delta, area_ext, area_int)
+        xyz_tsource = H0.center(what='xyz') +(0.4*H0.cell[1,:]-[0,5.31,0])
+        xyz_tdrain = H0.center(what='xyz') -(0.4*H0.cell[1,:]-[0,5.31,0]) -0.5*TSHS.cell[0,:]
+
+        Hfinal, l_al, l_buf = construct_modular(TSHS=TSHS, H0=H0, 
+            modules=[frame_tip, frame_tip], 
+            positions=[xyz_tsource, xyz_tdrain])
+
+    WARNING: maybe in some situations it might overlap some buffer and module atoms.
+        So, ALWAYS CHECK THAT FINAL XYZ IS WHAT YOU ACTUALLY EXPECT!!! 
+    """
+    Htmp = H0.copy()
+    l_al, l_buf = [], []
+    extra = 0
+    for i, mod, xyz in zip(range(len(positions)), modules[::-1], positions[::-1]):
+        H, al, buf = rearrange_H(TSHS, mod[0], Htmp, 
+            pos_dSE=xyz, area_Delta=mod[1], area_int=mod[3], area_for_buffer=mod[2])
+        l_al.append(al - extra)
+        l_buf.insert(0, buf)
+        extra += len(al)
+        Htmp = H.copy()
+
+    # Write xyz and info about modules
+    for i in range(len(positions)):
+        v = H.geom.copy()
+        v.atom[l_al[i]] = si.Atom(8, R=[1.44])
+        v.atom[l_buf[i]] = si.Atom(10, R=[1.44])
+        v.write('module_{}.xyz'.format(i+1))
+        # Print elec-pos end for use in tbtrans
+        print("< module_{}.xyz > \n   elec-pos end {} (or {})".format(i+1, l_al[i][-1]+1, -1-i*len(l_al[i])))
+
+    # Write buffer xyz and fdf block
+    v = H.geom.copy()
+    v.atom[np.concatenate(l_buf)] = si.Atom(10, R=[1.44]); v.write('buffer.xyz'.format(i+1))
+    from tbtncTools import list2range_TBTblock
+    with open('block_buffer.fdf', 'w') as fb:
+        fb.write("%block TBT.Atoms.Buffer\n")
+        fb.write(list2range_TBTblock(np.concatenate(l_buf[:])))    
+        fb.write("\n%endblock\n")
+
+    return H, l_al, l_buf
 
 
 def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
@@ -250,8 +322,6 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     "HS_SE_i.nc":       electrode HS file for usage of TBTGF as electrode in TBtrans
                         (to be used with "HS" flag in the electrode block for \Sigma)
     """
-
-    dR = 0.005
 
     # a_dev from *TBT.nc and TBT.SE.nc is not sorted correctly in older versions of tbtrans!!! 
     #a_dev = TBT.a_dev
@@ -302,9 +372,19 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     if area_for_buffer is None:
         area_for_buffer = area_int.copy()
         print("WARNING: You didn't provide 'area_for_buffer'. \n We are setting it to 'area_int'. Please check that it is completely correct by comparing 'a_dSE_host.xyz' and 'buffer.xyz'")
-    a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
+    a_dSE_host, new_HS_host, a_buffer_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
         area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
+    
+    # Write dSE xyz
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
+    # Write buffer atoms fdf block
+    #print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(a_buffer_host), list2range_TBTblock(a_buffer_host)))
+    v = new_HS_host.geom.copy(); v.atom[a_buffer_host] = si.Atom(8, R=[1.44]); v.write('buffer.xyz')
+    with open('block_buffer.fdf', 'w') as fb:
+        fb.write("%block TBT.Atoms.Buffer\n")
+        fb.write(list2range_TBTblock(a_buffer_host))    
+        fb.write("\n%endblock\n")
+    
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
     new_HS_host.geom.write('HS_DEV.fdf')
@@ -325,6 +405,9 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     E = TBT.E[Eindices] + 1j*eta_value
     tbl = si.io.table.tableSile('contour.IN', 'w')
     tbl.write_data(E.real, np.zeros(len(E)), np.ones(len(E)), fmt='.8f')
+
+    #############################
+    # Now we calculate and store the self-energy
 
     # Remove periodic boundary conditions
     TSHS_n = TSHS.copy()
@@ -526,8 +609,6 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
                         (to be used with "HS" flag in the electrode block for \Sigma)
     """
 
-    dR = 0.005
-
     # a_dev from *TBT.nc and TBT.SE.nc is not sorted correctly in older versions of tbtrans!!! 
     #a_dev = TBT.a_dev
     a_dev = np.sort(TBT.a_dev)
@@ -577,9 +658,19 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     if area_for_buffer is None:
         area_for_buffer = area_int.copy()
         print("WARNING: You didn't provide 'area_for_buffer'. \n We are setting it to 'area_int'. Please check that it is completely correct by comparing 'a_dSE_host.xyz' and 'buffer.xyz'")
-    a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
+    a_dSE_host, new_HS_host, a_buffer_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
         area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
+    
+    # Write dSE xyz
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
+    # Write buffer atoms fdf block
+    #print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(a_buffer_host), list2range_TBTblock(a_buffer_host)))
+    v = new_HS_host.geom.copy(); v.atom[a_buffer_host] = si.Atom(8, R=[1.44]); v.write('buffer.xyz')
+    with open('block_buffer.fdf', 'w') as fb:
+        fb.write("%block TBT.Atoms.Buffer\n")
+        fb.write(list2range_TBTblock(a_buffer_host))    
+        fb.write("\n%endblock\n")
+    
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
     new_HS_host.geom.write('HS_DEV.fdf')
@@ -849,8 +940,6 @@ def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT
                         (to be used with "HS" flag in the electrode block for \Sigma)
     """
 
-    dR = 0.005
-
     # a_dev from *TBT.nc and TBT.SE.nc is not sorted correctly in older versions of tbtrans!!! 
     #a_dev = TBT.a_dev
     a_dev = np.sort(TBT.a_dev)
@@ -900,9 +989,19 @@ def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT
     if area_for_buffer is None:
         area_for_buffer = area_int.copy()
         print("WARNING: You didn't provide 'area_for_buffer'. \n We are setting it to 'area_int'. Please check that it is completely correct by comparing 'a_dSE_host.xyz' and 'buffer.xyz'")
-    a_dSE_host, new_HS_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
+    a_dSE_host, new_HS_host, a_buffer_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
         area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
+    
+    # Write dSE xyz
     v = new_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('a_dSE_host.xyz')
+    # Write buffer atoms fdf block
+    #print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(a_buffer_host), list2range_TBTblock(a_buffer_host)))
+    v = new_HS_host.geom.copy(); v.atom[a_buffer_host] = si.Atom(8, R=[1.44]); v.write('buffer.xyz')
+    with open('block_buffer.fdf', 'w') as fb:
+        fb.write("%block TBT.Atoms.Buffer\n")
+        fb.write(list2range_TBTblock(a_buffer_host))    
+        fb.write("\n%endblock\n")
+
     # Write final host model
     new_HS_host.geom.write('HS_DEV.xyz')
     new_HS_host.geom.write('HS_DEV.fdf')
@@ -1217,9 +1316,19 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
     # Map a_inner into host geometry (which includes electrodes!)
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
-    a_dSE_host, sorted_HS_host = map_xyz(A=TSHS, B=HS_host, pos_B=pos_dSE, 
-        area_Delta=area_Delta, area_for_buffer=area_for_buffer, tol=tol)
+    a_dSE_host, sorted_HS_host, a_buffer_host = map_xyz(A=TSHS, B=HS_host, center_B=pos_dSE, 
+        area_Delta=area_Delta, a_Delta=a_inner, area_for_buffer=area_for_buffer, tol=tol)
+    
+    # Write dSE xyz
     v = sorted_HS_host.geom.copy(); v.atom[a_dSE_host] = si.Atom(8, R=[1.44]); v.write('inside_a_dSE_host.xyz')
+    # Write buffer atoms fdf block
+    #print("\nbuffer atoms after rearranging (1-based): {}\n{}".format(len(a_buffer_host), list2range_TBTblock(a_buffer_host)))
+    v = sorted_HS_host.geom.copy(); v.atom[a_buffer_host] = si.Atom(8, R=[1.44]); v.write('buffer.xyz')
+    with open('block_buffer.fdf', 'w') as fb:
+        fb.write("%block TBT.Atoms.Buffer\n")
+        fb.write(list2range_TBTblock(a_buffer_host))    
+        fb.write("\n%endblock\n")
+    
     sorted_HS_host.write('inside_HS_DEV_periodic.nc')
     
     # Write final host model (same as TSHS, but

@@ -179,7 +179,7 @@ def radial_T_from_bc(tbt, elec, E=None, kavg=True,
     print('Close: DONE')
 
     # Read bond-current
-    bc = tbt.bond_current(0, en, kavg=kavg, sum='all', uc=True)
+    bc = tbt.bond_current(0, en, kavg=kavg, only='all', uc=True)
     print('bc: DONE')
 
     Tavg = np.zeros(ntheta*nradii)
@@ -395,7 +395,7 @@ def T_from_bc(tbt, elec, idx_1, idx_2, E=None, kavg=True, write_xyz=None):
     T = np.zeros(len(energies))
     for ie,e in enumerate(energies):
         print('Doing E # {} of {}  ({} eV)'.format(ie+1, len(energies), e)) 
-        bc = tbt.bond_current(elec, e, kavg=kavg, sum='all', uc=True)
+        bc = tbt.bond_current(elec, e, kavg=kavg, only='all', uc=True)
         T[ie] += bc[idx_1.reshape(-1, 1), idx_2.reshape(1, -1)].sum()
     return T
 
@@ -418,7 +418,7 @@ def T_from_bc_from_orbital(tbt, elec, o_idx, idx_1, idx_2, E=None,
         orbs_1 = tbt.geom.a2o(idx_1) + o_idx
         orbs_2 = tbt.geom.a2o(idx_2) + o_idx
         T[ie] = Jij[orbs_1.reshape(-1, 1), orbs_2.reshape(1, -1)].sum()
-        #bc = tbt.bond_current(elec, e, kavg=kavg, sum='all', uc=True)
+        #bc = tbt.bond_current(elec, e, kavg=kavg, only='all', uc=True)
     return T
 
 def list2range_TBTblock(lst):
@@ -1475,14 +1475,21 @@ def makeTB_shifted(tshs, tbt, xyz_tip, TSHS_0, pzidx, nn, WW, LL, TSHS_elec,
     return HS_dev
 
 
-def plot_transmission(H, iE1, iE2, ymin=None, ymax=None, style='-', color='k', label=None, xshift=0, yshift=0):
+def plot_transmission(H, iE1, iE2, ymin=None, ymax=None, style='-', color='k', label=None, 
+    xshift=0, yshift=0, plus=None, plot=True):
     print('Plotting transmission from elec {} to elec {} in: {}'.format(iE1, iE2, H))
     H = si.get_sile(H)
     tr = H.transmission(H.elecs[iE1], H.elecs[iE2])
     
     ax = plt.gca()
 
-    ax.plot(H.E+xshift, tr+yshift, style, color=color, label=label)
+    if not plot:
+        return ax, tr
+
+    if plus is not None:
+        ax.plot(H.E+xshift, tr+plus+yshift, style, color=color, label=label)
+    else:
+        ax.plot(H.E+xshift, tr+yshift, style, color=color, label=label)
     
     if ymin is None:
         ymin = ax.get_ylim()[0]
