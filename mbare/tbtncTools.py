@@ -279,6 +279,42 @@ def atom_current_radial(tbt, elec, E, kavg=True, activity=True,
 
     return radii, thetas, current_r
 
+def plot_LDOS(geom, LDOS, figname='figure.png', 
+    vmin=None, vmax=None):
+    
+    import matplotlib.collections as collections
+    from matplotlib.colors import LogNorm
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    x, y = geom.xyz[:,0], geom.xyz[:,1]
+
+    fig, ax = plt.subplots()
+    ax.set_aspect('equal')
+
+    vmin, vmax = vmin, vmax
+    if vmin is None:
+        vmin = np.min(LDOS)
+    if vmax is None:
+        vmax = np.max(LDOS)
+    colors = LDOS
+    area = 15
+    image = ax.scatter(x, y, c=colors, s=area, marker='o', edgecolors='None', cmap='viridis')
+    image.set_clim(vmin, vmax)
+    image.set_array(LDOS)
+
+    ax.autoscale()
+    ax.margins(0.1)
+    plt.xlabel('$x (\AA)$')
+    plt.ylabel('$y (\AA)$')
+    plt.gcf()
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    axcb = plt.colorbar(image, cax=cax, format='%1.2f', ticks=[vmin, vmax])
+
+    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=300)
+    print('Successfully plotted to "{}"'.format(figname))
+
 
 def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2):
     # Determine orientation
@@ -1500,7 +1536,10 @@ def plot_transmission(H, iE1, iE2, ymin=None, ymax=None, style='-', color='k', l
     ax.set_ylabel('Transmission')
     ax.set_xlabel('$\mathrm{E-E_F}$ $(e\mathrm{V})$')
 
-    return ax, tr
+    if plus is not None:
+        return ax, tr+plus+yshift
+    else:
+        return ax, tr+yshift
 
 def plot_transmission_bulk(H, iE, ymin=None, ymax=None, style='-', color='k', label=None, xshift=0, yshift=0):
     print('Plotting bulk transmission from elec {} in: {}'.format(iE, H))
@@ -1523,7 +1562,31 @@ def plot_transmission_bulk(H, iE, ymin=None, ymax=None, style='-', color='k', la
     return ax, tr
 
 def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
-    
+    """Read bond currents from tbtrans output
+
+    Parameters
+    ----------
+    f : string
+        TBT.nc file
+    idx_elec : int
+        the electrode of originating electrons
+    only : {‘+’, ‘-‘, ‘all’}
+        If “+” is supplied only the positive orbital currents are used, for “-“, 
+        only the negative orbital currents are used, else return the sum of both. 
+    E : float or int, 
+        A float for energy in eV, int for explicit energy index 
+    k : bool, int or array_like
+        whether the returned bond current is k-averaged, 
+        an explicit k-point or a selection of k-points
+
+    Returns
+    -------
+    bc, nc.E[idx_E], geom
+    bc : bond currents
+    nc.E[idx_E] : energy
+    geom : geometry
+
+    """
     print('Reading: {}'.format(f))
     nc = si.get_sile(f)
     na, na_dev = nc.na, nc.na_dev
@@ -1626,12 +1689,63 @@ class Groupby:
 
         return result
 
-def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  zaxis=2, k='avg', avg=True, scale='raw', xyz_origin=None,
+def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True, scale='raw', xyz_origin=None,
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
     lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
     spsite=None, dpi=180):   
-    """ 
-    atoms must be 0-based
+    """ Read bond currents from tbtrans output and plot them 
+    
+    Parameters
+    ----------
+    f : string
+        TBT.nc file
+    idx_elec : int
+        the electrode of originating electrons
+    only : {‘+’, ‘-‘, ‘all’}
+        If “+” is supplied only the positive orbital currents are used, for “-“, 
+        only the negative orbital currents are used, else return the sum of both. 
+    E : float or int, 
+        A float for energy in eV, int for explicit energy index 
+    k : bool, int or array_like
+        whether the returned bond current is k-averaged, 
+        an explicit k-point or a selection of k-points
+    zaxis : int
+        index of out-of plane direction
+    avg :  bool
+        if "True", then it averages all currents coming from each atom and plots 
+        them in a homogeneous map
+        if "False" it plots ALL bond currents as lines originating from each atom
+    scale : {'%' or 'raw'}
+        wheter values are percent. Change vmin and vmax accordingly between 0% and 100%
+    vmin : float
+        min value in colormap. All data greater than this will be blue 
+    vmax : float
+        max value in colormap. All data greater than this will be yellow 
+    lattice : bool
+        whether you want xy coord of atoms plotted as black dots in the figure 
+    ps : float
+        size of these dots
+    spsite : list of int
+        special atoms in the lattice that you want to plot as red dots instead
+    atoms : np.array or list
+        list of atoms for which reading and plotting bondcurrents
+    out : string
+        name of final png figure 
+
+    .....
+
+
+    Returns
+    -------
+    bc, nc.E[idx_E], geom
+    bc : bond currents
+    nc.E[idx_E] : energy
+    geom : geometry
+
+    Notes
+    -----
+    - atoms must be 0-based
+    - Be sure that atoms belong to a single plane (say, only graphene, no tip)
     """
     t = time.time()
     print('\n***** BOND-CURRENTS (2D map) *****\n')    
