@@ -1570,8 +1570,8 @@ def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
         TBT.nc file
     idx_elec : int
         the electrode of originating electrons
-    only : {‘+’, ‘-‘, ‘all’}
-        If “+” is supplied only the positive orbital currents are used, for “-“, 
+    only : {'+', '-', 'all'}
+        If "+" is supplied only the positive orbital currents are used, for "-", 
         only the negative orbital currents are used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
@@ -1701,8 +1701,8 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
         TBT.nc file
     idx_elec : int
         the electrode of originating electrons
-    only : {‘+’, ‘-‘, ‘all’}
-        If “+” is supplied only the positive orbital currents are used, for “-“, 
+    only : {'+', '-', 'all'}
+        If "+" is supplied only the positive orbital currents are used, for "-", 
         only the negative orbital currents are used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
