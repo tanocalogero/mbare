@@ -286,12 +286,11 @@ def construct_modular(TSHS, H0, modules, positions):
     return H, l_al, l_buf
 
 
-def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
+def in2out_frame_PBCoff(TSHS, a_inner, eta_value, energies, TBT, 
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, area_for_buffer=None,  
     TBTSE=None, useCAP=None, spin=0, tol=None):
     """
     TSHS:                   TSHS from perturbed DFT system
-    TSHS_0:                 TSHS from reference unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
                             \Sigma will live on these atoms
     eta_value:              imaginary part in Green's function
@@ -355,15 +354,15 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
     # Check
     v = TSHS.geom.copy()
-    v.atom[v.o2a(o_dev, uniq=True)] = si.Atom(8, R=[1.44])
+    v.atom[v.o2a(o_dev, unique=True)] = si.Atom(8, R=[1.44])
     v.write('o_dev.xyz')
     # Check
     vv = TSHS.geom.sub(a_dev)
-    vv.atom[vv.o2a(o_inner, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.atom[vv.o2a(o_inner, unique=True)] = si.Atom(8, R=[1.44])
     vv.write('o_inner.xyz')
     # Check
     vv = TSHS.geom.sub(a_dev)
-    vv.atom[vv.o2a(o_outer, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.atom[vv.o2a(o_outer, unique=True)] = si.Atom(8, R=[1.44])
     vv.write('o_outer.xyz')
 
     # Map a_inner into host geometry (which includes electrodes!)
@@ -450,7 +449,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     #geom_dev = TSHS_n.geom.sub(a_dev)
     #geom_dev = geom_dev.translate(-geom_dev.xyz[0, :])
     #geom_dev.set_sc(g.sc.fit(geom_dev))
-    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, uniq=True))
+    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, unique=True))
     #geom_inner = geom_inner.translate(-geom_inner.xyz[0, :])
     #geom_inner.set_sc(g.sc.fit(geom_inner))
 
@@ -499,7 +498,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     BZ = si.BrillouinZone(TSHS_n); BZ._k = np.array([[0.,0.,0.]]); BZ._w = np.array([1.0])
     # Now try and generate a TBTGF file
     GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
-    GF.write_header(E, BZ, Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
+    GF.write_header(BZ, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
     ###############
 
     # if there's a self energy enclosed by the frame
@@ -509,7 +508,7 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
 
     print('Computing and storing Sigma in TBTGF and dSE format...')
-    for i, (HS4GF, _, e) in enumerate(GF):
+    for i, (ispin, HS4GF, _, e) in enumerate(GF):
     #for i, e in enumerate(E):
         print('Doing E # {} of {}  ({} eV)'.format(i+1, len(E), e.real))  # Only for 1 kpt 
         print('Doing E # {} of {}  ({} eV)'.format(i+1, len(E), e.real), file=open('log', 'a+'))  # Only for 1 kpt 
@@ -572,12 +571,11 @@ def in2out_frame_PBCoff(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
         GF.write_self_energy(S_i*e - H_i - SE_i) 
 
 
-def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
+def in2out_frame_PBCon(TSHS, a_inner, eta_value, energies, TBT, 
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, area_for_buffer=None, 
     TBTSE=None, useCAP=None, spin=0, tol=None, PBCdir=0, kmesh=None, kfromfile=True, usetrs=True):
     """
     TSHS:                   TSHS from perturbed DFT system
-    TSHS_0:                 TSHS from reference unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
                             \Sigma will live on these atoms
     eta_value:              imaginary part in Green's function
@@ -641,17 +639,17 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
     # Check
     v = TSHS.geom.copy()
-    v.atom[v.o2a(o_dev, uniq=True)] = si.Atom(8, R=[1.44])
+    v.atom[v.o2a(o_dev, unique=True)] = si.Atom(8, R=[1.44])
     v.write('o_dev.xyz')
     # Check
     vv = TSHS.geom.sub(a_dev)
-    vv.atom[vv.o2a(o_inner, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.atom[vv.o2a(o_inner, unique=True)] = si.Atom(8, R=[1.44])
     vv.write('o_inner.xyz')
     # Check
     vv = TSHS.geom.sub(a_dev)
-    vv.atom[vv.o2a(o_outer, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.atom[vv.o2a(o_outer, unique=True)] = si.Atom(8, R=[1.44])
     vv.write('o_outer.xyz')
-
+    
     # Map a_inner into host geometry (which includes electrodes!)
     # WARNING: we will now rearrange the atoms in the host geometry
     # putting the mapped ones at the end of the coordinates list
@@ -731,7 +729,7 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     #geom_dev = TSHS_n.geom.sub(a_dev)
     #geom_dev = geom_dev.translate(-geom_dev.xyz[0, :])
     #geom_dev.set_sc(g.sc.fit(geom_dev))
-    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, uniq=True))
+    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, unique=True))
     #geom_inner = geom_inner.translate(-geom_inner.xyz[0, :])
     #geom_inner.set_sc(g.sc.fit(geom_inner))
 
@@ -744,7 +742,7 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
     geom_inner = geom_inner.translate(-geom_inner.xyz.min(0))
 #    geom_inner2.write('test2.xyz')
     #for x in geom_inner.xyz - geom_inner2.xyz:
-    #    print(x)
+    #    print(x)   
     print( np.absolute(geom_inner.xyz - geom_inner2.xyz).max() )
     
     # plt.figure()
@@ -815,7 +813,7 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
     # Now try and generate a TBTGF file
     GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
-    GF.write_header(E, mp, Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
+    GF.write_header(mp, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
     ###############
     
     # if there's a self energy enclosed by the frame
@@ -826,7 +824,7 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
 
     print('\nComputing and storing Sigma in TBTGF and dSE format...')
     ik=0
-    for HS4GF, k, e in GF:
+    for ispin, HS4GF, k, e in GF:
         if HS4GF:
             print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k))
             print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k), 
@@ -903,12 +901,11 @@ def in2out_frame_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT,
         GF.write_self_energy(S_i*e - H_i - SE_i) 
 
 
-def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT, 
+def in2out_frame_PBCoff_TB_PBCon(TSHS, a_inner, eta_value, energies, TBT, 
     HS_host, pzidx=None, pos_dSE=None, area_Delta=None, area_int=None, area_for_buffer=None, 
     TBTSE=None, useCAP=None, spin=0, tol=None, PBCdir=0, kmesh=None, kfromfile=True, usetrs=True):
     """
     TSHS:                   TSHS from perturbed DFT system
-    TSHS_0:                 TSHS from reference unperturbed DFT system
     a_inner:                idx atoms in sub-region A of perturbed DFT system (e.g. frame)
                             \Sigma will live on these atoms
     eta_value:              imaginary part in Green's function
@@ -972,15 +969,15 @@ def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT
 
     # Check
     v = TSHS.geom.copy()
-    v.atom[v.o2a(o_dev, uniq=True)] = si.Atom(8, R=[1.44])
+    v.atom[v.o2a(o_dev, unique=True)] = si.Atom(8, R=[1.44])
     v.write('o_dev.xyz')
     # Check
     vv = TSHS.geom.sub(a_dev)
-    vv.atom[vv.o2a(o_inner, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.atom[vv.o2a(o_inner, unique=True)] = si.Atom(8, R=[1.44])
     vv.write('o_inner.xyz')
     # Check
     vv = TSHS.geom.sub(a_dev)
-    vv.atom[vv.o2a(o_outer, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.atom[vv.o2a(o_outer, unique=True)] = si.Atom(8, R=[1.44])
     vv.write('o_outer.xyz')
 
     # Map a_inner into host geometry (which includes electrodes!)
@@ -1063,7 +1060,7 @@ def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT
     #geom_dev = TSHS_n.geom.sub(a_dev)
     #geom_dev = geom_dev.translate(-geom_dev.xyz[0, :])
     #geom_dev.set_sc(g.sc.fit(geom_dev))
-    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, uniq=True))
+    #geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, unique=True))
     #geom_inner = geom_inner.translate(-geom_inner.xyz[0, :])
     #geom_inner.set_sc(g.sc.fit(geom_inner))
 
@@ -1147,7 +1144,7 @@ def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT
 
     # Now try and generate a TBTGF file
     GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
-    GF.write_header(E, mp, Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
+    GF.write_header(mp, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
     ###############
     
     # if there's a self energy enclosed by the frame
@@ -1158,7 +1155,7 @@ def in2out_frame_PBCoff_TB_PBCon(TSHS, TSHS_0, a_inner, eta_value, energies, TBT
 
     print('\nComputing and storing Sigma in TBTGF and dSE format...')
     ik=0
-    for HS4GF, k, e in GF:
+    for ispin, HS4GF, k, e in GF:
         if HS4GF:
             print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k))
             print('Doing kpt # {} of {}  -->  {}'.format(ik+1, len(klist), k), 
@@ -1305,11 +1302,11 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
 
     # Check
     v = TSHS.geom.copy()
-    v.atom[v.o2a(o_dev, uniq=True)] = si.Atom(8, R=[1.44])
+    v.atom[v.o2a(o_dev, unique=True)] = si.Atom(8, R=[1.44])
     v.write('inside_o_dev.xyz')
     # Check
     vv = TSHS.geom.sub(a_dev)
-    vv.atom[vv.o2a(o_inner, uniq=True)] = si.Atom(8, R=[1.44])
+    vv.atom[vv.o2a(o_inner, unique=True)] = si.Atom(8, R=[1.44])
     # Equivalent to vv.atom[a_inner] = si.Atom(8, R=[1.44])
     vv.write('inside_o_inner.xyz')
 
@@ -1383,7 +1380,7 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
         geom_dev = TSHS_n.geom.sub(a_dev)
         geom_dev = geom_dev.translate(-geom_dev.xyz[0, :])
         geom_dev.set_sc(g.sc.fit(geom_dev))
-        geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, uniq=True))
+        geom_inner = geom_dev.sub(geom_dev.o2a(o_inner, unique=True))
         geom_inner = geom_inner.translate(-geom_inner.xyz[0, :])
         geom_inner.set_sc(g.sc.fit(geom_inner))
         if pzidx is not None:
@@ -1397,7 +1394,7 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
         BZ = si.BrillouinZone(TSHS_n); BZ._k = np.array([[0.,0.,0.]]); BZ._wk = np.array([1.0])
         # Now try and generate a TBTGF file
         GF = si.io.TBTGFSileTBtrans('inside_SE_i.TBTGF')
-        GF.write_header(E, BZ, Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
+        GF.write_header(BZ, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
         ###############
 
         # if there's a self energy in the initial TSHS, read it now
@@ -1442,7 +1439,7 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
 
         print('Computing and storing Sigma in TBTGF and dSE format...')
         ################## Loop over E
-        for i, (HS4GF, _, e) in enumerate(GF):
+        for i, (ispin, HS4GF, _, e) in enumerate(GF):
             print('Doing E = {} eV'.format(e.real))  # Only for 1 kpt 
             print('Doing E = {} eV'.format(e.real), file=open('log', 'a+'))  # Only for 1 kpt 
             #Gssum_i = np.zeros((len(o_inner), len(o_inner)), np.complex128)
