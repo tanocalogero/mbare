@@ -68,8 +68,8 @@ def plot_PotDiff(TSHS, TSHS_0, ia, axis, iio, o_dev, o_inner):  # include option
     on0 = np.array([np.mean(on0)]*len(on))
     # Check
     print('y (Ang)\t\tPot (eV)\tPot0 (eV)\tPot-Pot0 (eV)')
-    a_dev = TSHS.o2a(o_dev, uniq=True)
-    a_inner = TSHS.o2a(o_inner, uniq=True)
+    a_dev = TSHS.o2a(o_dev, unique=True)
+    a_inner = TSHS.o2a(o_inner, unique=True)
     for iia, y, o, o0 in zip(atoms, yy, on, on0):
         if iia in a_inner:
             print('{:7.4f}\t\t{:7.4f}\t\t{:7.4f}\t\t{:7.4f}\t\t(inner)'.format(y,o,o0,o-o0))    
@@ -557,7 +557,7 @@ def get_dft_param(tshs, ia, iio, jjo, unique=False, onlynnz=False, idx=None):
     edges = HS.edges(orbital=io, exclude=-1)
     # Remove non-jjo connections
     # convert to atoms (only unique values)
-    edges = HS.o2a(edges, uniq=True)
+    edges = HS.o2a(edges, unique=True)
     if idx is not None:
         mask = np.in1d(edges, idx)
         edges = edges[mask]
@@ -709,7 +709,7 @@ def sc_xyz_shift(geom, axis):
 
 #def Delta(TSHS, HS_TB, shape='Cuboid', z_graphene=None, ext_offset=None, center=None, 
 def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None, 
-    thickness=None, zaxis=2, atoms=None):
+    thickness=None, zaxis=2, atoms=None, segment_dir=None):
     # z coordinate of graphene plane 
     if z_graphene is None:
         print('\n\nPlease provide a value for z_graphene in Delta routine')
@@ -717,7 +717,7 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
     # Center of shape in TSHS 
     if center is None:
         center = TSHS.center(atom=(TSHS.xyz[:,zaxis] == z_graphene).nonzero()[0])
-        print('Setting Delta around this center: {}'.format(center))
+    center = np.asarray(center)
     # Thickness in Ang
     if thickness is None:
         thickness = 6. # Ang
@@ -741,38 +741,58 @@ def Delta(TSHS, shape='Cuboid', z_graphene=None, ext_offset=None, center=None,
         if ext_offset is not None:
             ext_offset = np.asarray(ext_offset, np.float64).copy()
             ext_offset *= 2
+    elif shape == 'Segment':
+        mkshape = si.shape.Cuboid
+        # In this case it's the full perimeter so we double
+        size *= 2
+        area_tot = mkshape(size, center=TSHS.center(atom=(TSHS.xyz[:,zaxis] == z_graphene).nonzero()[0]))
+        size[segment_dir] = thickness
+        if ext_offset is not None:
+            ext_offset = np.asarray(ext_offset, np.float64).copy()
     else:
         print('\n shape = "{}" is not implemented...'.format(shape))
         exit(1)
-    # External boundary
-    area_ext = mkshape(size, center=center)
-    # Adjust with ext_offset if necessary
-    if ext_offset is not None:
-        ext_offset = np.asarray(ext_offset, np.float64)
-        area_ext = area_ext.expand(-ext_offset)
-        # Force it to be Cube or Sphere (side = ext_offset) if necessary
-        if shape == 'Sphere' or shape == 'Cube':
-            if len(ext_offset.nonzero()[0]) > 1:
-                print('Offset is in both axes. Please set "shape" to Cuboid or Ellipsoid')
-                exit(1)
-            axis = ext_offset.nonzero()[0][0]
-            print('Offset is non-zero along axis: {}...complementary is {}'.format(axis, int(axis<1)))
-            new_ext_offset = np.zeros(3); new_ext_offset[int(axis<1)] = ext_offset[axis]
-            area_ext = area_ext.expand(-new_ext_offset)
-    #a_ext = area_ext.within_index(TSHS.xyz)
-    
-    # Internal boundary
-    area_int = area_ext.expand(-thickness)
-    # Disjuction composite shape
-    Delta = area_ext - area_int
-    # Atoms within Delta and internal boundary
-    a_Delta = Delta.within_index(TSHS.xyz)
-    a_int = area_int.within_index(TSHS.xyz)
-    if atoms is not None:
-        a_Delta = a_Delta[np.in1d(a_Delta, atoms)]
-    # Check
-    v = TSHS.geom.copy(); v.atom[a_Delta] = si.Atom(8, R=[1.43]); v.write('a_Delta.xyz')
-    return a_Delta, a_int, Delta, area_ext, area_int
+
+    if shape == 'Segment':  # ADD COMPLEMENTARY AREA...
+        # Areas
+        Delta = mkshape(size, center=center)
+        # Atoms within Delta and complementary area
+        a_Delta = Delta.within_index(TSHS.xyz)
+        if atoms is not None:
+            a_Delta = a_Delta[np.in1d(a_Delta, atoms)]
+        # Check
+        v = TSHS.geom.copy(); v.atom[a_Delta] = si.Atom(8, R=[1.43]); v.write('a_Delta.xyz')
+        return a_Delta, Delta
+    else:
+        # External boundary
+        area_ext = mkshape(size, center=center)
+        # Adjust with ext_offset if necessary
+        if ext_offset is not None:
+            ext_offset = np.asarray(ext_offset, np.float64)
+            area_ext = area_ext.expand(-ext_offset)
+            # Force it to be Cube or Sphere (side = ext_offset) if necessary
+            if shape == 'Sphere' or shape == 'Cube':
+                if len(ext_offset.nonzero()[0]) > 1:
+                    print('Offset is in both axes. Please set "shape" to Cuboid or Ellipsoid')
+                    exit(1)
+                axis = ext_offset.nonzero()[0][0]
+                print('Offset is non-zero along axis: {}...complementary is {}'.format(axis, int(axis<1)))
+                new_ext_offset = np.zeros(3); new_ext_offset[int(axis<1)] = ext_offset[axis]
+                area_ext = area_ext.expand(-new_ext_offset)
+        #a_ext = area_ext.within_index(TSHS.xyz)
+        
+        # Internal boundary
+        area_int = area_ext.expand(-thickness)
+        # Disjuction composite shape
+        Delta = area_ext - area_int
+        # Atoms within Delta and internal boundary
+        a_Delta = Delta.within_index(TSHS.xyz)
+        a_int = area_int.within_index(TSHS.xyz)
+        if atoms is not None:
+            a_Delta = a_Delta[np.in1d(a_Delta, atoms)]
+        # Check
+        v = TSHS.geom.copy(); v.atom[a_Delta] = si.Atom(8, R=[1.43]); v.write('a_Delta.xyz')
+        return a_Delta, a_int, Delta, area_ext, area_int
 
 
 def makeTB(TSHS_0, pzidx, nn, WW, LL, elec=None, save=True, return_bands=False):
@@ -957,13 +977,14 @@ def makeTB_FrameOutside(tshs, tbt, center, TSHS_0, pzidx, nn, WW, LL,
     # DEVICE + ELECTRODES geometry 
     # Width and length of device
     W, L = int(round(WW/g0.cell[0,0])), int(round(LL/g0.cell[1,1]))
+    print('Device is {} x {} supercell of the unit orthogonal cell'.format(W, L))
     # (nc files should be written ONLY after selection and rearranging of GF/dSE area)
     HS_dev = H0.tile(W, 0).tile(L, 1)
     if save:
         HS_dev.write('HS_DEV.nc')
         HS_dev.geom.write('HS_DEV.fdf')
         HS_dev.geom.write('HS_DEV.xyz')
-    
+
     # ELECTRODE
     if elec is not None:
         n_el = int(round(elec.cell[1,1]/H0.cell[1,1]))
