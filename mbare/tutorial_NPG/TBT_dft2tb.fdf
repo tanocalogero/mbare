@@ -1,0 +1,83 @@
+SystemName          dft2tb
+SystemLabel         dft2tb
+
+#TBT.k [20 1 1]
+TBT.k [1 1 1]
+#%block TBT.k
+#diag 1 1 1   # Make sure you have even number of k-points..
+#size 1 1 1
+#%endblock TBT.k
+
+TBT.HS HS_DEV.nc
+
+TS.Voltage    0.00000 eV
+
+%block TS.ChemPots
+#  tip
+  mesh
+%endblock TS.ChemPots
+#%block TS.ChemPot.tip
+#  mu - V/2
+#  contour.eq
+#    begin
+#      C-tip
+#      T-tip
+#    end
+#%endblock
+%block TS.ChemPot.mesh
+  mu V/2
+  contour.eq
+    begin
+      C-tip
+      T-tip
+    end
+%endblock
+
+%include block_buffer.fdf
+TBT.dH CAP.delta.nc
+TBT.dH.Current.Orb False
+
+%block TS.Elecs
+  SigmaGf
+  top
+  bottom
+%endblock TS.Elecs
+%block TBT.Elec.SigmaGf
+  HS HS_SE_i.nc
+  semi-inf-direction +A3
+  electrode-position end -1
+  eta 0. eV   # never change this. Ensure that TBTGF has the same value.
+  out-of-core True
+  bulk true
+  GF SE_i.TBTGF
+%endblock
+%block TS.Elec.top
+  HS He.nc
+  chem-pot mesh
+  semi-inf-direction +a2
+  elec-pos end -492  # 18710
+  Bloch 8 1 1
+%endblock 
+%block TS.Elec.bottom
+  HS He.nc
+  chem-pot mesh
+  semi-inf-direction -a2
+  elec-pos 1
+  Bloch 8 1 1
+%endblock 
+
+#TBT.Elecs.Eta    0.00001 eV
+
+%block TBT.contour.line
+ from -2. eV to 2. eV
+   file contour.IN
+%endblock
+
+TBT.CDF.SelfEnergy.Save
+TBT.CDF.SelfEnergy.Only      F
+
+TBT.DOS.Elecs  T
+TBT.DOS.A T
+TBT.DOS.A.All T
+TBT.Current.Orb T
+TBT.Symmetry.TimeReversal  F
