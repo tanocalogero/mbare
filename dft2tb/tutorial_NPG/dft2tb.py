@@ -30,7 +30,7 @@ using parameters from the projection of the unperturbed tshs, i.e. the NPG elect
 C_list_e = (tshs_0.atoms.Z == 6).nonzero()[0]  # nonzero returns a tuple. We don't want that
 He = tshs_0.sub(C_list_e); He.reduce()  # sub does not eliminate empty species. We don't want that
 # Sub this on the pz orbitals only
-He = He.sub(He.atoms[0], orb_index=[2])
+He = He.sub_orbital(He.atoms[0], orbital=[2])
 # Save nc for tbtrans and xyz to check
 He.write('He.nc')
 He.geom.write('He.xyz')
