@@ -1,0 +1,83 @@
+SystemName          dft2tb
+SystemLabel         dft2tb
+
+TBT.k [1 1 1]
+
+TBT.HS HS_DEV.nc
+
+TS.Voltage    0.00000 eV
+
+%block TS.ChemPots
+  mesh
+%endblock TS.ChemPots
+%block TS.ChemPot.mesh
+  mu V/2
+  contour.eq
+    begin
+      C-tip
+      T-tip
+    end
+%endblock
+
+%include block_buffer.fdf
+TBT.dH CAP.delta.nc
+TBT.dH.Current.Orb False
+
+%block TS.Elecs
+  tsource
+  tdrain
+  epoxy1
+  top
+  bottom
+%endblock TS.Elecs
+%block TBT.Elec.tsource
+  HS ../inputfiles/graphene_tip/HS_SE_i.nc
+  semi-inf-direction +A3
+  electrode-position end -1
+  eta 0. eV   # never change this. Ensure that TBTGF has the same value.
+  out-of-core True
+  bulk true
+  GF ../tsource.TBTGF
+%endblock
+%block TBT.Elec.tdrain
+  HS ../inputfiles/graphene_tip/HS_SE_i.nc
+  semi-inf-direction +A3
+  elec-pos end -505
+  eta 0. eV   # never change this. Ensure that TBTGF has the same value.
+  out-of-core True
+  bulk true
+  GF ../tdrain.TBTGF
+%endblock
+%block TBT.Elec.epoxy1
+  HS ../inputfiles/graphene_epoxy/HS_SE_i.nc
+  semi-inf-direction +A3
+  elec-pos end -253
+  eta 0. eV   # never change this. Ensure that TBTGF has the same value.
+  out-of-core True
+  bulk true
+  GF ../inputfiles/graphene_epoxy/SE_i.TBTGF
+%endblock
+
+%block TS.Elec.top
+  HS ../He.nc
+  chem-pot mesh
+  semi-inf-direction +a2
+  elec-pos end -757
+  Bloch 16 1 1
+%endblock 
+%block TS.Elec.bottom
+  HS ../He.nc
+  chem-pot mesh
+  semi-inf-direction -a2
+  elec-pos 1
+  Bloch 16 1 1
+%endblock 
+
+%block TBT.contour.line
+ from -2. eV to 2. eV
+   file ../contour.IN
+%endblock
+
+TBT.DOS.A T
+TBT.Current.Orb T
+TBT.Symmetry.TimeReversal  F

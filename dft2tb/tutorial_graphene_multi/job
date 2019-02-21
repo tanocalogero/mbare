@@ -1,0 +1,94 @@
+#!/bin/sh
+#PBS -N dual_hpc
+#PBS -q fotonano
+#PBS -l nodes=1:ppn=20
+#PBS -l mem=120gb
+#PBS -l walltime=3:00:00
+#PBS -j oe
+#PBS -o out
+
+date
+source $PBS_O_HOME/.bashrc
+ulimit -s unlimited
+cd $PBS_O_WORKDIR
+
+##############
+echo "--> Building input Hamiltonian and files for SE around"
+module purge
+module load npa-cluster-setup
+module load python2.7.numerics/gnu-7.3.0
+#module swap sisl sisl-dev/0/python-2.7.14/gnu-7.3.0
+export PYTHONPATH="$HOME/DTU-DATA/Scripts/sisl-modules:$PYTHONPATH"
+export OMP_NUM_THREADS=$PBS_NUM_PPN
+export MKL_NUM_THREADS=$PBS_NUM_PPN
+which sgeom
+
+python multi.dft2tb.py 0 > multi.dft2tb.out
+cp inputfiles/graphene_tip/SE_i.TBTGF tdrain.TBTGF
+cp inputfiles/graphene_tip/SE_i.TBTGF tsource.TBTGF
+
+
+####################
+
+#for x in $(seq 0.0 0.3333333 6.0)
+for x in 0
+do
+echo ""
+echo "---------------> Running python with x-xsource: "
+echo $x
+mkdir hpc$x
+cp multi.dft2tb.py lib_*py hpc$x/
+
+cd hpc$x/
+
+module purge
+module load npa-cluster-setup
+module load python2.7.numerics/gnu-7.3.0
+#module swap sisl sisl-dev/0/python-2.7.14/gnu-7.3.0
+export PYTHONPATH="$HOME/DTU-DATA/Scripts/sisl-modules:$PYTHONPATH"
+export OMP_NUM_THREADS=$PBS_NUM_PPN
+export MKL_NUM_THREADS=$PBS_NUM_PPN
+which sgeom
+
+python multi.dft2tb.py $x > multi.dft2tb.out
+
+##########
+echo "---------------> Running TBtrans"
+cp ../TBT_dft2tb.fdf .
+
+module purge
+module load npa-cluster-setup
+module load siesta-trunk.latest/gnu-7.3.0
+which siesta
+
+rm dft2tb.TBT.*
+#mpirun tbtrans TBT_dft2tb.fdf > TBT_dft2tb.out
+
+#Export Number of Threads
+SOCKETS=2
+THREADS=$((PBS_NP/SOCKETS))
+export OMP_NUM_THREADS=$THREADS
+
+mpirun --report-bindings \
+       -x OMP_NUM_THREADS \
+       -x OMP_PROC_BIND=true \
+       --map-by ppr:1:socket:pe=$OMP_NUM_THREADS tbtrans_omp TBT_dft2tb.fdf > TBT_dft2tb.out
+
+###############
+echo "------------------------- > Plotting bondcurrents"
+cp ../plot_bc.py .
+
+module purge
+module load npa-cluster-setup
+module load python2.7.numerics/gnu-7.3.0
+#module swap sisl sisl-dev/0/python-2.7.14/gnu-7.3.0
+export PYTHONPATH="$HOME/DTU-DATA/Scripts/sisl-modules:$PYTHONPATH"
+export OMP_NUM_THREADS=$PBS_NUM_PPN
+export MKL_NUM_THREADS=$PBS_NUM_PPN
+which sgeom
+
+python plot_bc.py > plot_bc.out
+
+cd ..
+
+done
