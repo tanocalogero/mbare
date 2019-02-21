@@ -71,7 +71,6 @@ Hfinal, l_al, l_buf = construct_modular(H0=H0,
 	positions=[xyz_tsource, xyz_tdrain, xyz_epoxy1])
 
 
-
 # Write final model
 Hfinal.geom.write('HS_DEV.xyz')
 Hfinal.geom.write('HS_DEV.fdf')
