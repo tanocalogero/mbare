@@ -139,7 +139,7 @@ def makearea(TSHS, shape='Cuboid', z_area=None, ext_offset=None, center=None,
         return a_Delta, a_int, Delta, area_ext, area_R2
 
 
-def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2):
+def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
     # Determine orientation
     if zaxis == 2:
         xaxis, yaxis = 0, 1
@@ -154,7 +154,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2):
     print('\nSetting up CAP regions: {}'.format(side))
     print('Width of absorbing walls = {} Angstrom'.format(dz_CAP))
     Wmax = 100
-    dH_CAP = si.Hamiltonian(geometry, dtype='complex128')
+    dH_CAP = si.Hamiltonian(geometry, dtype='complex128', dim=spin)
     CAP_list = []
     ### EDGES
     if 'right' in side:

@@ -139,7 +139,7 @@ def makearea(TSHS, shape='Cuboid', z_area=None, ext_offset=None, center=None,
         return a_Delta, a_int, Delta, area_ext, area_R2
 
 
-def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2):
+def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
     # Determine orientation
     if zaxis == 2:
         xaxis, yaxis = 0, 1
@@ -154,7 +154,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2):
     print('\nSetting up CAP regions: {}'.format(side))
     print('Width of absorbing walls = {} Angstrom'.format(dz_CAP))
     Wmax = 100
-    dH_CAP = si.Hamiltonian(geometry, dtype='complex128')
+    dH_CAP = si.Hamiltonian(geometry, dtype='complex128', dim=spin)
     CAP_list = []
     ### EDGES
     if 'right' in side:
@@ -676,7 +676,7 @@ def construct_modular(H0, TSHS, modules, positions):
     modules:    list of tuples (a_Delta, Delta, area_ext, area_R2) as those obtained 
                 from tbtncTools.Delta provide one tuple for each module
     positions:  list of xyz object (ndarray with shape=(1,3)) in H0 corresponding to
-                the center of mass of each module. Provide one xyz for each module
+                the center of mass of each module provide one xyz for each module
 
     EXAMPLE OF USAGE:
         from tbtncTools import Delta
@@ -717,6 +717,7 @@ def construct_modular(H0, TSHS, modules, positions):
         al = np.arange(first, last)
         l_al.append(al)
 
+        from tbtncTools import list2range_TBTblock 
         print('After reordering: \n{}'.format(list2range_TBTblock(al)))
         
         v = H.geom.copy()
@@ -748,6 +749,7 @@ def construct_modular(H0, TSHS, modules, positions):
     v.atom[all_buf] = si.Atom(10, R=[1.44]); v.write('framesbuffer.xyz')
     
     # Write buffer xyz and fdf block
+    from tbtncTools import list2range_TBTblock
     with open('block_buffer.fdf', 'w') as fb:
         fb.write("%block TBT.Atoms.Buffer\n")
         fb.write(list2range_TBTblock(all_buf))    
