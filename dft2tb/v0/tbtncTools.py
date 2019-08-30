@@ -2571,3 +2571,295 @@ def plot_ADOS_x(f, idx_elec, E=0.0, k='avg', vmin=None, vmax=None, log=False):
     plot_collimation_factor(y_vals, [BoA, BoA_f], BoA_iso, BoA_back, energy)
     print('Done in {} sec'.format(time.time() - t))
 
+
+def read_vectorcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
+    """Read vector currents from tbtrans output
+
+    Parameters
+    ----------
+    f : string
+        TBT.nc file
+    idx_elec : int
+        the electrode of originating electrons
+    only : {''+', '-', 'all'}
+        If "+" is supplied only the positive orbital currents are used, for "-", 
+        only the negative orbital currents are used, else return the sum of both. 
+    E : float or int, 
+        A float for energy in eV, int for explicit energy index 
+    k : bool, int or array_like
+        whether the returned bond current is k-averaged, 
+        an explicit k-point or a selection of k-points
+
+    Returns
+    -------
+    vc, nc.E[idx_E], geom
+    vc : vector currents
+    nc.E[idx_E] : energy
+    geom : geometry
+
+    """
+
+    print('Reading: {}'.format(f))
+    nc = si.get_sile(f)
+    na, na_dev = nc.na, nc.na_dev
+    print('Total number of atoms: {}'.format(na))
+    print('Number of atoms in the device region: {}'.format(na_dev))
+    geom = nc.geom
+
+    elec = nc.elecs[idx_elec]
+    print('Vector-currents from electrode: {}'.format(elec))
+
+    # Check 'k' argument
+    if k == 'avg':
+        avg = True
+    elif k == 'Gamma':
+        kpts = nc.kpt
+        idx_gamma = np.where(np.sum(np.abs(kpts), axis=1) == 0.)[0]
+        if (kpts[idx_gamma] != np.zeros((1, 3))).any(axis=1):
+            print('\nThe selected k-point is not Gamma!\n')
+            exit(0)
+        else:
+            print('You have selected the Gamma point!')
+        avg = idx_gamma # Index of Gamma point in nc.kpt
+    else:
+        print('\nInvalid `k` argument: please keep the default `avg` or use `Gamma`!\n')
+        exit(0)
+
+    idx_E = nc.Eindex(E)
+    print('Extracting vector-currents at energy: {} eV'.format(nc.E[idx_E]))
+    vc = nc.vector_current(elec, kavg=avg, only=only, E=idx_E)
+
+    return vc, nc.E[idx_E], geom
+
+
+def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
+    '''
+    Function to offset the "center" of a colormap. Useful for
+    data with a negative min and positive max and you want the
+    middle of the colormap's dynamic range to be at zero
+    
+    Input
+    -----
+      cmap : The matplotlib colormap to be altered
+      start : Offset from lowest point in the colormap's range.
+          Defaults to 0.0 (no lower ofset). Should be between
+          0.0 and 1.0.
+      midpoint : The new center of the colormap. Defaults to 
+          0.5 (no shift). Should be between 0.0 and 1.0. In
+          general, this should be  1 - vmax/(vmax + abs(vmin))
+          For example if your data range from -15.0 to +5.0 and
+          you want the center of the colormap at 0.0, `midpoint`
+          should be set to  1 - 5/(5 + 15)) or 0.75
+      stop : Offset from highets point in the colormap's range.
+          Defaults to 1.0 (no upper ofset). Should be between
+          0.0 and 1.0.
+    '''
+    cdict = {
+        'red': [],
+        'green': [],
+        'blue': [],
+        'alpha': []
+    }
+      
+    # regular index to compute the colors
+    reg_index = np.linspace(start, stop, 257)
+
+    # shifted index to match the data
+    shift_index = np.hstack([
+        np.linspace(0.0, midpoint, 128, endpoint=False), 
+        np.linspace(midpoint, 1.0, 129, endpoint=True)
+    ])
+    
+    for ri, si in zip(reg_index, shift_index):
+        r, g, b, a = cmap(ri)
+
+        cdict['red'].append((si, r, r))
+        cdict['green'].append((si, g, g))
+        cdict['blue'].append((si, b, b))
+        cdict['alpha'].append((si, a, a))
+        
+    newcmap = matplotlib.colors.LinearSegmentedColormap(name, cdict)
+    plt.register_cmap(cmap=newcmap)
+
+    return newcmap
+
+def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
+    zaxis=2, scale='raw', xyz_origin=None, vmin=None, vmax=None, lw=5, lattice=False, 
+    ps=20, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
+    spsite=None, dpi=180, units='angstrom'):   
+    """ Read bond currents from tbtrans output and plot them 
+    
+    Parameters
+    ----------
+    f_UP : string
+        TBT_UP.nc file
+    f_DN : string
+        TBT_DN.nc file
+    idx_elec : int
+        the electrode of originating electrons
+    only : {'+', '-', 'all'}
+        If "+" is supplied only the positive orbital currents are used, for "-", 
+        only the negative orbital currents are used, else return the sum of both. 
+    E : float or int, 
+        A float for energy in eV, int for explicit energy index 
+    k : bool, int or array_like
+        whether the returned bond current is k-averaged, 
+        an explicit k-point or a selection of k-points
+    zaxis : int
+        index of out-of plane direction
+    scale : {'%' or 'raw'}
+        wheter values are percent. Change vmin and vmax accordingly between 0 and 1
+    vmin : float
+        min value in colormap. All data greater than this will be dark blue 
+    vmax : float
+        max value in colormap. All data greater than this will be dark red
+    lattice : bool
+        whether you want xy coord of atoms plotted as black dots in the figure 
+    ps : float
+        size of these dots
+    spsite : list of int
+        special atoms in the lattice that you want to plot as red dots instead
+    atoms : np.array or list
+        list of atoms for which reading and plotting bondcurrents
+    out : string
+        name of final png figure 
+
+    .....
+
+    Notes
+    -----
+    - atoms must be 0-based
+    - Be sure that atoms belong to a single plane (say, only graphene, no tip)
+    """
+    t = time.time()
+    print('\n***** SPIN LOCAL CURRENT (2D map) *****\n')    
+    nc_UP = si.get_sile(f_UP)
+    nc_DN = si.get_sile(f_DN)
+    elec = nc_UP.elecs[idx_elec]
+
+    # Read vector currents from TBT_UP.nc file
+    vc_UP, energy, geom = read_vectorcurrents(f_UP, idx_elec, only, E, k)
+    # Read vector currents from TBT_DN.nc file
+    vc_DN, _, _ = read_vectorcurrents(f_DN, idx_elec, only, E, k)
+
+    # If needed, select only selected atoms
+    #bc_coo = bc.tocoo()
+    #i_list, j_list, bc_list = bc_coo.row, bc_coo.col, bc_coo.data
+    if atoms is None:
+        print('Reading vector-currents among all atoms in device region')
+        atoms = nc_UP.a_dev
+        #del bc_coo
+    else:
+        print('atoms != None is not implemented...')
+        exit(1)
+        # Only choose atoms with positive indices
+        # atoms = atoms[atoms >= 0]
+        # select = np.logical_and(np.in1d(i_list, atoms), np.in1d(j_list, atoms))
+        # i_list, j_list, bc_list = i_list[select], j_list[select], bc_list[select]
+        # del bc_coo, select
+
+    # Compute Js, taking care of putting minus sign if norm of vc_DN is larger than UP 
+    normUP = np.linalg.norm(vc_UP, axis=1)
+    normDN = np.linalg.norm(vc_DN, axis=1)
+    Js_vector = vc_UP - vc_DN
+    Js = np.linalg.norm(Js_vector, axis=1) * np.sign(normUP-normDN)
+
+    # Plot
+    import matplotlib.collections as collections
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    cmap = cm.RdBu
+
+    if out is None:
+        figname = 'Js_{}_E{}.png'.format(elec, energy)
+    else:
+        figname = '{}_{}_E{}.png'.format(out, elec, energy)
+
+    fig, ax = plt.subplots()
+    ax.set_aspect('equal')
+
+    if zaxis == 2:
+        xaxis, yaxis = 0, 1
+    elif zaxis == 0:
+        xaxis, yaxis = 1, 2
+    elif zaxis == 1:
+        xaxis, yaxis = 0, 2
+
+    # Plot magnitude of vector currents from BC as 2D map
+    atoms_sort = np.sort(atoms)
+    Js_sorted = Js[atoms_sort]
+
+    if scale is 'radial':
+        _, r = geom.close_sc(xyz_origin, R=np.inf, idx=atoms_sort, ret_rij=True)
+        Js_sorted = np.multiply(Js_sorted, r)
+
+    if units == 'angstrom':
+        unitstr = '$\AA$'
+        x, y = geom.xyz[atoms_sort, xaxis], geom.xyz[atoms_sort, yaxis]
+        a_mask = 1.54
+    elif units == 'nm':
+        unitstr = 'nm'
+        x, y = .1*geom.xyz[atoms_sort, xaxis], .1*geom.xyz[atoms_sort, yaxis]
+        a_mask = .1*1.54
+
+    max_vc_UP = np.amax(np.linalg.norm(vc_UP, axis=1)[atoms_sort])
+    max_vc_DN = np.amax(np.linalg.norm(vc_DN, axis=1)[atoms_sort])
+    if scale is '%':
+        if vmin is None:
+            vmin = 1 
+        if vmax is None:
+            vmax = 1
+        vmax = vmax*max_vc_UP
+        vmin = -vmin*max_vc_DN
+    else:
+        # Get max of spin down and spin up currents 
+        vmax = max_vc_UP 
+        vmin = -max_vc_DN 
+
+    coords = np.column_stack((x, y))
+
+    shifted_cmap = shiftedColorMap(cmap, midpoint=1-vmax/(vmax+np.absolute(vmin)), name='shifted') # midpoint=0.3472
+
+    img, min, max = mask_interpolate(coords, Js_sorted, oversampling=30, a=a_mask)
+    # Note that we tell imshow to show the array created by mask_interpolate
+    # faithfully and not to interpolate by itself another time.
+    image = ax.imshow(img.T, extent=(min[0], max[0], min[1], max[1]),
+                      origin='lower', interpolation='none', cmap=shifted_cmap,
+                      vmin=vmin, vmax=vmax)
+    
+    if lattice:
+        if units == 'angstrom':
+            x, y = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
+        if units == 'nm':
+            x, y = .1*geom.xyz[atoms, xaxis], .1*geom.xyz[atoms, yaxis]
+        ax.scatter(x, y, s=ps*2, marker='o', facecolors='None', linewidth=0.8, edgecolors='k')
+
+    if spsite is not None:
+        if units == 'angstrom':
+            xs, ys = geom.xyz[spsite, xaxis], geom.xyz[spsite, yaxis]
+        if units == 'nm':
+            xs, ys = .1*geom.xyz[spsite, xaxis], .1*geom.xyz[spsite, yaxis]
+        ax.scatter(xs, ys, s=ps*2, marker='x', color='red')
+
+    ax.autoscale()
+    ax.margins(0.)
+    #ax.margins(0.05)
+    plt.ylim(ymin, ymax)
+    plt.xlim(xmin, xmax)
+    plt.xlabel('x ({})'.format(unitstr))
+    plt.ylabel('y ({})'.format(unitstr))
+    plt.gcf()
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    axcb = plt.colorbar(image, cax=cax, format='%f', ticks=[vmin, vmax])
+    if vmin == 0.:
+        axcb.ax.set_yticklabels(['0', '$\geq$ {:.3e}'.format(vmax)])
+    else:
+        axcb.ax.set_yticklabels(['$\leq$ {:.3e}'.format(vmin), '$\geq$ {:.3e}'.format(vmax)])
+    print('MIN bc among selected atoms (in final plot) = {}'.format(vmin))
+    print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))    
+
+    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=dpi)
+    print('Successfully plotted to "{}"'.format(figname))
+    print('Done in {} sec'.format(time.time() - t))
+
