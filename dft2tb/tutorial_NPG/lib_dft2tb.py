@@ -554,7 +554,7 @@ def in2out_frame_PBCoff(TSHS, a_R1, eta_value, energies, TBT,
     
     # Now finally we initialize a TBTGF file. We
     # We will fill it further below with the matrix for the DFT-TB self-energy
-    GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
+    GF = si.io.tbtgfSileTBtrans('SE_i.TBTGF')
     GF.write_header(BZ, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
     ###############
 

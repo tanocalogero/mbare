@@ -528,7 +528,7 @@ def in2out_frame_PBCoff(TSHS, a_inner, eta_value, energies, TBT,
     # Brillouin zone. In this case we will have a Gamma-only TBTGF!!!!!
     BZ = si.BrillouinZone(TSHS_n); BZ._k = np.array([[0.,0.,0.]]); BZ._w = np.array([1.0])
     # Now try and generate a TBTGF file
-    GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
+    GF = si.io.tbtgfSileTBtrans('SE_i.TBTGF')
     GF.write_header(BZ, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
     ###############
 
@@ -845,7 +845,7 @@ def in2out_frame_PBCon(TSHS, a_inner, eta_value, energies, TBT,
         print('  {}\t{}'.format(j1,j2))
 
     # Now try and generate a TBTGF file
-    GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
+    GF = si.io.tbtgfSileTBtrans('SE_i.TBTGF')
     GF.write_header(mp, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
     ###############
     
@@ -1176,7 +1176,7 @@ def in2out_frame_PBCoff_TB_PBCon(TSHS, a_inner, eta_value, energies, TBT,
         print('  {}\t{}'.format(j1,j2))
 
     # Now try and generate a TBTGF file
-    GF = si.io.TBTGFSileTBtrans('SE_i.TBTGF')
+    GF = si.io.tbtgfSileTBtrans('SE_i.TBTGF')
     GF.write_header(mp, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
     ###############
     
@@ -1426,7 +1426,7 @@ def out2in_frame(TSHS, a_inner, eta_value, energies, TBT,
         # Brillouin zone. In this case we will have a Gamma-only TBTGF!!!!!
         BZ = si.BrillouinZone(TSHS_n); BZ._k = np.array([[0.,0.,0.]]); BZ._wk = np.array([1.0])
         # Now try and generate a TBTGF file
-        GF = si.io.TBTGFSileTBtrans('inside_SE_i.TBTGF')
+        GF = si.io.tbtgfSileTBtrans('inside_SE_i.TBTGF')
         GF.write_header(BZ, E, obj=Semi) # Semi HAS to be a Hamiltonian object, E has to be complex (WITH eta)
         ###############
 
