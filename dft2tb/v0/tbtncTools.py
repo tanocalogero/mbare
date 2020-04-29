@@ -345,9 +345,10 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         idx = np.where(np.logical_and(z1 <= z, z < z2))[0]
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
-        orbs = dH_CAP.geom.a2o(idx) # if you have just 1 orb per atom, then orb = ia
-        for orb,wz in zip(orbs, Wz):
-            dH_CAP[orb, orb] = complex(0, -wz)
+         for ii,wz in zip(idx, Wz):
+            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            for orb in orbs:
+                dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
         #print(list2range_TBTblock(idx))
 
@@ -359,9 +360,10 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         idx = np.where(np.logical_and(z2 < z, z <= z1))[0]
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
-        orbs = dH_CAP.geom.a2o(idx) # if you have just 1 orb per atom, then orb = ia
-        for orb,wz in zip(orbs, Wz):
-            dH_CAP[orb, orb] = complex(0, -wz)
+        for ii,wz in zip(idx, Wz):
+            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            for orb in orbs:
+                dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
         #print(list2range_TBTblock(idx))
 
@@ -373,9 +375,10 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         idx = np.where(np.logical_and(y1 <= y, y < y2))[0]
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
-        orbs = dH_CAP.geom.a2o(idx) # if you have just 1 orb per atom, then orb = ia
-        for orb,wz in zip(orbs, Wz):
-            dH_CAP[orb, orb] = complex(0, -wz)
+        for ii,wz in zip(idx, Wz):
+            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            for orb in orbs:
+                dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
         #print(list2range_TBTblock(idx))
 
@@ -387,9 +390,10 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         idx = np.where(np.logical_and(y2 < y, y <= y1))[0]
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
-        orbs = dH_CAP.geom.a2o(idx) # if you have just 1 orb per atom, then orb = ia
-        for orb,wz in zip(orbs, Wz):
-            dH_CAP[orb, orb] = complex(0, -wz)
+        for ii,wz in zip(idx, Wz):
+            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            for orb in orbs:
+                dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
         #print(list2range_TBTblock(idx))
 
