@@ -160,7 +160,7 @@ def mask_interpolate(coords, values, a=None, method='nearest', oversampling=300)
 def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True, scale='raw', xyz_origin=None,
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
     lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
-    spsite=None, dpi=180):   
+    spsite=None, dpi=180, units='angstrom'):   
     """ Read bond currents from tbtrans output and plot them 
     
     Parameters
@@ -170,23 +170,27 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     idx_elec : int
         the electrode of originating electrons
     only : {'+', '-', 'all'}
-        If '+' is supplied only the positive orbital currents are used, for '-',
-        only the negative orbital currents are used, else return the sum of both.
-    E : float or int,
-        A float for energy in eV, int for explicit energy index
+        If "+" is supplied only the positive orbital currents are used, for "-", 
+        only the negative orbital currents are used, else return the sum of both. 
+    E : float or int, 
+        A float for energy in eV, int for explicit energy index 
     k : bool, int or array_like
-        whether the returned bond current is k-averaged,
+        whether the returned bond current is k-averaged, 
         an explicit k-point or a selection of k-points
     zaxis : int
         index of out-of plane direction
+    avg :  bool
+        if "True", then it averages all currents coming from each atom and plots 
+        them in a homogeneous map
+        if "False" it plots ALL bond currents as lines originating from each atom
     scale : {'%' or 'raw'}
         wheter values are percent. Change vmin and vmax accordingly between 0% and 100%
     vmin : float
-        min value in colormap. All data greater than this will be blue
+        min value in colormap. All data greater than this will be blue 
     vmax : float
-        max value in colormap. All data greater than this will be yellow
+        max value in colormap. All data greater than this will be yellow 
     lattice : bool
-        whether you want xy coord of atoms plotted as black dots in the figure
+        whether you want xy coord of atoms plotted as black dots in the figure 
     ps : float
         size of these dots
     spsite : list of int
@@ -194,7 +198,8 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     atoms : np.array or list
         list of atoms for which reading and plotting bondcurrents
     out : string
-        name of final png figure
+        name of final png figure 
+
     .....
 
 
@@ -275,7 +280,14 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
             _, r = geom.close_sc(xyz_origin, R=np.inf, idx=atoms_sort, ret_rij=True)
             bc_avg = np.multiply(bc_avg, r)
 
-        x, y = geom.xyz[atoms_sort, xaxis], geom.xyz[atoms_sort, yaxis]
+        if units == 'angstrom':
+            unitstr = '$\AA$'
+            x, y = geom.xyz[atoms_sort, xaxis], geom.xyz[atoms_sort, yaxis]
+            a_mask = 1.54
+        elif units == 'nm':
+            unitstr = 'nm'
+            x, y = .1*geom.xyz[atoms_sort, xaxis], .1*geom.xyz[atoms_sort, yaxis]
+            a_mask = .1*1.54
 
         if scale is '%':
             if vmin is None:
@@ -291,7 +303,8 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
                 vmax = np.amax(bc_avg)
 
         coords = np.column_stack((x, y))
-        img, min, max = mask_interpolate(coords, bc_avg, oversampling=30, a=1.54)
+
+        img, min, max = mask_interpolate(coords, bc_avg, oversampling=30, a=a_mask)
         # Note that we tell imshow to show the array created by mask_interpolate
         # faithfully and not to interpolate by itself another time.
         image = ax.imshow(img.T, extent=(min[0], max[0], min[1], max[1]),
@@ -315,11 +328,17 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
         image = lattice_bonds
     
     if lattice:
-        x, y = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
+        if units == 'angstrom':
+            x, y = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
+        if units == 'nm':
+            x, y = .1*geom.xyz[atoms, xaxis], .1*geom.xyz[atoms, yaxis]
         ax.scatter(x, y, s=ps*2, marker='o', facecolors='None', linewidth=0.8, edgecolors='k')
 
     if spsite is not None:
-        xs, ys = geom.xyz[spsite, xaxis], geom.xyz[spsite, yaxis]
+        if units == 'angstrom':
+            xs, ys = geom.xyz[spsite, xaxis], geom.xyz[spsite, yaxis]
+        if units == 'nm':
+            xs, ys = .1*geom.xyz[spsite, xaxis], .1*geom.xyz[spsite, yaxis]
         ax.scatter(xs, ys, s=ps*2, marker='x', color='red')
 
     ax.autoscale()
@@ -327,8 +346,8 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     #ax.margins(0.05)
     plt.ylim(ymin, ymax)
     plt.xlim(xmin, xmax)
-    plt.xlabel('$x (\AA)$')
-    plt.ylabel('$y (\AA)$')
+    plt.xlabel('x ({})'.format(unitstr))
+    plt.ylabel('y ({})'.format(unitstr))
     plt.gcf()
 
     divider = make_axes_locatable(ax)
