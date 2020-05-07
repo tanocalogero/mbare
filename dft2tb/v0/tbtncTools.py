@@ -10,6 +10,7 @@ import matplotlib.cm as cm
 from itertools import groupby
 import sisl as si
 from numbers import Integral
+import time 
 
 # I don't know why, but the lines below were 
 # fucking up my routine "makeTB_FrameOutside", on the "contruct" command
@@ -345,7 +346,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         idx = np.where(np.logical_and(z1 <= z, z < z2))[0]
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
-         for ii,wz in zip(idx, Wz):
+        for ii,wz in zip(idx, Wz):
             orbs = dH_CAP.geom.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
@@ -2576,6 +2577,180 @@ def plot_ADOS_x(f, idx_elec, E=0.0, k='avg', vmin=None, vmax=None, log=False):
     print('Done in {} sec'.format(time.time() - t))
 
 
+
+def plot_bc_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
+    zaxis=2, scale='raw', xyz_origin=None, vmin=None, vmax=None, lw=5, lattice=False, 
+    ps=20, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
+    spsite=None, dpi=180, units='angstrom'):   
+    """ Read bond currents from tbtrans output and plot them 
+    
+    Parameters
+    ----------
+    f_UP : string
+        TBT_UP.nc file
+    f_DN : string
+        TBT_DN.nc file
+    idx_elec : int
+        the electrode of originating electrons
+    only : {'+', '-', 'all'}
+        If "+" is supplied only the positive orbital currents are used, for "-", 
+        only the negative orbital currents are used, else return the sum of both. 
+    E : float or int, 
+        A float for energy in eV, int for explicit energy index 
+    k : bool, int or array_like
+        whether the returned bond current is k-averaged, 
+        an explicit k-point or a selection of k-points
+    zaxis : int
+        index of out-of plane direction
+    scale : {'%' or 'raw'}
+        wheter values are percent. Change vmin and vmax accordingly between 0 and 1
+    vmin : float
+        min value in colormap. All data greater than this will be dark blue 
+    vmax : float
+        max value in colormap. All data greater than this will be dark red
+    lattice : bool
+        whether you want xy coord of atoms plotted as black dots in the figure 
+    ps : float
+        size of these dots
+    spsite : list of int
+        special atoms in the lattice that you want to plot as red dots instead
+    atoms : np.array or list
+        list of atoms for which reading and plotting bondcurrents
+    out : string
+        name of final png figure 
+
+    .....
+
+    Notes
+    -----
+    - atoms must be 0-based
+    - Be sure that atoms belong to a single plane (say, only graphene, no tip)
+    """
+    t = time.time()
+    print('\n***** BOND CURRENT spin UP + spin DOWN (2D map) *****\n')    
+    nc_UP = si.get_sile(f_UP)
+    nc_DN = si.get_sile(f_DN)
+    elec = nc_UP.elecs[idx_elec]
+
+    # Read bond currents from TBT_UP.nc and TBT_DN.nc file
+    bc_UP, energy, geom = read_bondcurrents(f_UP, idx_elec, only, E, k)
+    print('DONE reading UP... (ETA = {} s)'.format(time.time()-t))
+    bc_DN, _, _ = read_bondcurrents(f_DN, idx_elec, only, E, k)
+    print('DONE reading DN... (ETA = {} s)'.format(time.time()-t))
+
+    if atoms is None:
+        print('Reading vector-currents among all atoms in device region')
+        atoms = nc_UP.a_dev
+        #del bc_coo
+    else:
+        print('atoms != None is not implemented...')  # you could do it using tocoo and subbing all 3 columns
+        exit(1)
+
+    # Sum bc UP + DN 
+    bc = bc_UP + bc_DN
+    atoms_sort = np.sort(atoms)
+    bc_sum = bc.sum(1).A.ravel()[atoms_sort]
+    print('DONE summing UP and DN... (ETA = {} s)'.format(time.time()-t))
+
+    print('bc (MIN, MAX) = ({}, {})'.format(np.amin(bc_sum), np.amax(bc_sum)))
+
+    ####
+    # Plot bond currents as avg 2D map
+    import matplotlib.collections as collections
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    cmap = cm.viridis
+
+    if out is None:
+        figname = 'bc_UPplusDOWN_{}_E{}.png'.format(elec, energy)
+    else:
+        figname = '{}_{}_E{}.png'.format(out, elec, energy)
+
+    fig, ax = plt.subplots()
+    ax.set_aspect('equal')
+
+    if zaxis == 2:
+        xaxis, yaxis = 0, 1
+    elif zaxis == 0:
+        xaxis, yaxis = 1, 2
+    elif zaxis == 1:
+        xaxis, yaxis = 0, 2
+
+    if scale is 'radial':
+        _, r = geom.close_sc(xyz_origin, R=np.inf, idx=atoms_sort, ret_rij=True)
+        bc_sum = np.multiply(bc_sum, r)
+
+    if units == 'angstrom':
+        unitstr = '$\AA$'
+        x, y = geom.xyz[atoms_sort, xaxis], geom.xyz[atoms_sort, yaxis]
+        a_mask = 1.54
+    elif units == 'nm':
+        unitstr = 'nm'
+        x, y = .1*geom.xyz[atoms_sort, xaxis], .1*geom.xyz[atoms_sort, yaxis]
+        a_mask = .1*1.54
+
+    # Define range of colors
+    if scale is '%':
+        if vmin is None:
+            vmin = np.amin(bc_sum)*100/np.amax(bc_sum) 
+        if vmax is None:
+            vmax = 100
+        vmin = vmin*np.amax(bc_sum)/100
+        vmax = vmax*np.amax(bc_sum)/100
+    else:
+        if vmin is None:
+            vmin = np.amin(bc_sum) 
+        if vmax is None:
+            vmax = np.amax(bc_sum)
+
+    coords = np.column_stack((x, y))
+
+    img, min, max = mask_interpolate(coords, bc_sum, oversampling=30, a=a_mask)
+    # Note that we tell imshow to show the array created by mask_interpolate
+    # faithfully and not to interpolate by itself another time.
+    image = ax.imshow(img.T, extent=(min[0], max[0], min[1], max[1]),
+                      origin='lower', interpolation='none', cmap=cmap,
+                      vmin=vmin, vmax=vmax)
+    
+    if lattice:
+        if units == 'angstrom':
+            x, y = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
+        if units == 'nm':
+            x, y = .1*geom.xyz[atoms, xaxis], .1*geom.xyz[atoms, yaxis]
+        ax.scatter(x, y, s=ps*2, marker='o', facecolors='None', linewidth=0.8, edgecolors='k')
+
+    if spsite is not None:
+        if units == 'angstrom':
+            xs, ys = geom.xyz[spsite, xaxis], geom.xyz[spsite, yaxis]
+        if units == 'nm':
+            xs, ys = .1*geom.xyz[spsite, xaxis], .1*geom.xyz[spsite, yaxis]
+        ax.scatter(xs, ys, s=ps*2, marker='x', color='red')
+
+    ax.autoscale()
+    ax.margins(0.)
+    #ax.margins(0.05)
+    plt.ylim(ymin, ymax)
+    plt.xlim(xmin, xmax)
+    plt.xlabel('x ({})'.format(unitstr))
+    plt.ylabel('y ({})'.format(unitstr))
+    plt.gcf()
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    axcb = plt.colorbar(image, cax=cax, format='%f', ticks=[vmin, vmax])
+    if vmin == 0.:
+        axcb.ax.set_yticklabels(['0', '$\geq$ {:.3e}'.format(vmax)])
+    else:
+        axcb.ax.set_yticklabels(['$\leq$ {:.3e}'.format(vmin), '$\geq$ {:.3e}'.format(vmax)])
+    print('MIN bc among selected atoms (in final plot) = {}'.format(vmin))
+    print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))    
+
+    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=dpi)
+    print('Successfully plotted to "{}"'.format(figname))
+    print('DONE all in {} sec'.format(time.time() - t))
+
+
+
+
 def read_vectorcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     """Read vector currents from tbtrans output
 
@@ -2634,7 +2809,6 @@ def read_vectorcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     vc = nc.vector_current(elec, kavg=avg, only=only, E=idx_E)
 
     return vc, nc.E[idx_E], geom
-
 
 def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
     '''
@@ -2807,17 +2981,202 @@ def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
 
     max_vc_UP = np.amax(np.linalg.norm(vc_UP, axis=1)[atoms_sort])
     max_vc_DN = np.amax(np.linalg.norm(vc_DN, axis=1)[atoms_sort])
+    maxmax = np.amax([max_vc_UP, max_vc_DN])
     if scale is '%':
         if vmin is None:
             vmin = 1 
         if vmax is None:
             vmax = 1
-        vmax = vmax*max_vc_UP
-        vmin = -vmin*max_vc_DN
+        vmax = vmax*maxmax #vmax*max_vc_UP
+        vmin = -vmin*maxmax #-vmin*max_vc_DN
+    else:
+        if vmin is None:
+            vmin = -maxmax # -max_vc_DN 
+        if vmax is None:
+            vmax = maxmax # max_vc_UP 
+        # Get max of spin down and spin up currents 
+
+    coords = np.column_stack((x, y))
+
+    shifted_cmap = shiftedColorMap(cmap, midpoint=1-vmax/(vmax+np.absolute(vmin)), name='shifted') # midpoint=0.3472
+
+    img, min, max = mask_interpolate(coords, Js_sorted, oversampling=30, a=a_mask)
+    # Note that we tell imshow to show the array created by mask_interpolate
+    # faithfully and not to interpolate by itself another time.
+    image = ax.imshow(img.T, extent=(min[0], max[0], min[1], max[1]),
+                      origin='lower', interpolation='none', cmap=shifted_cmap,
+                      vmin=vmin, vmax=vmax)
+    
+    if lattice:
+        if units == 'angstrom':
+            x, y = geom.xyz[atoms, xaxis], geom.xyz[atoms, yaxis]
+        if units == 'nm':
+            x, y = .1*geom.xyz[atoms, xaxis], .1*geom.xyz[atoms, yaxis]
+        ax.scatter(x, y, s=ps*2, marker='o', facecolors='None', linewidth=0.8, edgecolors='k')
+
+    if spsite is not None:
+        if units == 'angstrom':
+            xs, ys = geom.xyz[spsite, xaxis], geom.xyz[spsite, yaxis]
+        if units == 'nm':
+            xs, ys = .1*geom.xyz[spsite, xaxis], .1*geom.xyz[spsite, yaxis]
+        ax.scatter(xs, ys, s=ps*2, marker='x', color='red')
+
+    ax.autoscale()
+    ax.margins(0.)
+    #ax.margins(0.05)
+    plt.ylim(ymin, ymax)
+    plt.xlim(xmin, xmax)
+    plt.xlabel('x ({})'.format(unitstr))
+    plt.ylabel('y ({})'.format(unitstr))
+    plt.gcf()
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    axcb = plt.colorbar(image, cax=cax, format='%f', ticks=[vmin, vmax])
+    if vmin == 0.:
+        axcb.ax.set_yticklabels(['0', '$\geq$ {:.3e}'.format(vmax)])
+    else:
+        axcb.ax.set_yticklabels(['$\leq$ {:.3e}'.format(vmin), '$\geq$ {:.3e}'.format(vmax)])
+    print('MIN bc among selected atoms (in final plot) = {}'.format(vmin))
+    print('MAX bc among selected atoms (in final plot) = {}'.format(vmax))    
+
+    plt.savefig(figname, bbox_inches='tight', transparent=True, dpi=dpi)
+    print('Successfully plotted to "{}"'.format(figname))
+    print('Done in {} sec'.format(time.time() - t))
+
+
+def plot_spin_local_current_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
+    zaxis=2, scale='raw', xyz_origin=None, vmin=None, vmax=None, lw=5, lattice=False, 
+    ps=20, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
+    spsite=None, dpi=180, units='angstrom'):   
+    """ Read bond currents from tbtrans output and plot them 
+    
+    Parameters
+    ----------
+    f_UP : string
+        TBT_UP.nc file
+    f_DN : string
+        TBT_DN.nc file
+    idx_elec : int
+        the electrode of originating electrons
+    only : {'+', '-', 'all'}
+        If "+" is supplied only the positive orbital currents are used, for "-", 
+        only the negative orbital currents are used, else return the sum of both. 
+    E : float or int, 
+        A float for energy in eV, int for explicit energy index 
+    k : bool, int or array_like
+        whether the returned bond current is k-averaged, 
+        an explicit k-point or a selection of k-points
+    zaxis : int
+        index of out-of plane direction
+    scale : {'%' or 'raw'}
+        wheter values are percent. Change vmin and vmax accordingly between 0 and 1
+    vmin : float
+        min value in colormap. All data greater than this will be dark blue 
+    vmax : float
+        max value in colormap. All data greater than this will be dark red
+    lattice : bool
+        whether you want xy coord of atoms plotted as black dots in the figure 
+    ps : float
+        size of these dots
+    spsite : list of int
+        special atoms in the lattice that you want to plot as red dots instead
+    atoms : np.array or list
+        list of atoms for which reading and plotting bondcurrents
+    out : string
+        name of final png figure 
+
+    .....
+
+    Notes
+    -----
+    - atoms must be 0-based
+    - Be sure that atoms belong to a single plane (say, only graphene, no tip)
+    """
+    t = time.time()
+    print('\n***** SPIN LOCAL CURRENT (2D map) *****\n')    
+    nc_UP = si.get_sile(f_UP)
+    nc_DN = si.get_sile(f_DN)
+    elec = nc_UP.elecs[idx_elec]
+
+    # Read vector currents from TBT_UP.nc file
+    vc_UP, energy, geom = read_vectorcurrents(f_UP, idx_elec, only, E, k)
+    # Read vector currents from TBT_DN.nc file
+    vc_DN, _, _ = read_vectorcurrents(f_DN, idx_elec, only, E, k)
+
+    # If needed, select only selected atoms
+    #bc_coo = bc.tocoo()
+    #i_list, j_list, bc_list = bc_coo.row, bc_coo.col, bc_coo.data
+    if atoms is None:
+        print('Reading vector-currents among all atoms in device region')
+        atoms = nc_UP.a_dev
+        #del bc_coo
+    else:
+        print('atoms != None is not implemented...')
+        exit(1)
+        # Only choose atoms with positive indices
+        # atoms = atoms[atoms >= 0]
+        # select = np.logical_and(np.in1d(i_list, atoms), np.in1d(j_list, atoms))
+        # i_list, j_list, bc_list = i_list[select], j_list[select], bc_list[select]
+        # del bc_coo, select
+
+    # Compute Js, taking care of putting minus sign if norm of vc_DN is larger than UP 
+    normUP = np.linalg.norm(vc_UP, axis=1)
+    normDN = np.linalg.norm(vc_DN, axis=1)
+    Js_vector = vc_UP - vc_DN
+    Js = np.linalg.norm(Js_vector, axis=1) * np.sign(normUP-normDN)
+
+    # Plot
+    import matplotlib.collections as collections
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    cmap = cm.RdBu
+
+    if out is None:
+        figname = 'Js_{}_E{}.png'.format(elec, energy)
+    else:
+        figname = '{}_{}_E{}.png'.format(out, elec, energy)
+
+    fig, ax = plt.subplots()
+    ax.set_aspect('equal')
+
+    if zaxis == 2:
+        xaxis, yaxis = 0, 1
+    elif zaxis == 0:
+        xaxis, yaxis = 1, 2
+    elif zaxis == 1:
+        xaxis, yaxis = 0, 2
+
+    # Plot magnitude of vector currents from BC as 2D map
+    atoms_sort = np.sort(atoms)
+    Js_sorted = Js[atoms_sort]
+
+    if scale is 'radial':
+        _, r = geom.close_sc(xyz_origin, R=np.inf, idx=atoms_sort, ret_rij=True)
+        Js_sorted = np.multiply(Js_sorted, r)
+
+    if units == 'angstrom':
+        unitstr = '$\AA$'
+        x, y = geom.xyz[atoms_sort, xaxis], geom.xyz[atoms_sort, yaxis]
+        a_mask = 1.54
+    elif units == 'nm':
+        unitstr = 'nm'
+        x, y = .1*geom.xyz[atoms_sort, xaxis], .1*geom.xyz[atoms_sort, yaxis]
+        a_mask = .1*1.54
+
+    max_vc_UP = np.amax(np.linalg.norm(vc_UP, axis=1)[atoms_sort])
+    max_vc_DN = np.amax(np.linalg.norm(vc_DN, axis=1)[atoms_sort])
+    maxmax = np.amax([max_vc_UP, max_vc_DN])
+    if scale is '%':
+        if vmin is None:
+            vmin = 1 
+        if vmax is None:
+            vmax = 1
+        vmax = vmax*maxmax #vmax*max_vc_UP
+        vmin = -vmin*maxmax #-vmin*max_vc_DN
     else:
         # Get max of spin down and spin up currents 
-        vmax = max_vc_UP 
-        vmin = -max_vc_DN 
+        vmax = maxmax # max_vc_UP 
+        vmin = -maxmax # -max_vc_DN 
 
     coords = np.column_stack((x, y))
 
