@@ -134,10 +134,10 @@ def xyz2polar(tbt, origin=0):
     t[i_yneg] = transl.angle(i_yneg, dir=(-1., 0, 0), rad=True) +np.pi
     return r, t
 
-def radial_T_from_bc(tbt, elec, E=None, kavg=True, 
+def radial_T_from_bt(tbt, elec, E=None, kavg=True, 
     origin=0, thetamin=0., thetamax=2*np.pi, ntheta=360, 
     Rmin=5., Rmax=999999999, dr=40., 
-    input=None, save='radial_T_from_bc.txt', saveinput='rt.txt'):
+    input=None, save='radial_T_from_bt.txt', saveinput='rt.txt'):
     
     if E:
         Eidx = tbt.Eindex(E)
@@ -182,8 +182,8 @@ def radial_T_from_bc(tbt, elec, E=None, kavg=True,
     ishell = tbt.geom.close_sc(origin, R=radii, idx=tbt.a_dev)
     print('Close: DONE')
 
-    # Read bond-current
-    bc = tbt.bond_current(0, en, kavg=kavg, only='all', uc=True)
+    # Read bond-transmission
+    bc = tbt.bond_transmission(E=en, elec=0, kavg=kavg, only='all', uc=True)
     print('bc: DONE')
 
     Tavg = np.zeros(ntheta*nradii)
@@ -208,17 +208,17 @@ def radial_T_from_bc(tbt, elec, E=None, kavg=True,
     # Write
     f = open(save, 'w')
     f.write('center {}\n'.format(origin))
-    f.write('radius (Ang), \t theta (rad), \tT from radial bond current\n')
+    f.write('radius (Ang), \t theta (rad), \tT from radial bond transmission\n')
     for rr, theta, ttt in zip(radii_toplot, thetas_toplot, Tavg):
         f.write('{}\t{}\t{}\n'.format(rr, theta, ttt))
     f.close()
 
     return radii_toplot, thetas_toplot, Tavg 
 
-def atom_current_radial(tbt, elec, E, kavg=True, activity=True, 
+def atom_transmission_radial(tbt, elec, E, kavg=True, activity=True, 
     origin=0, thetamin=0., thetamax=2*np.pi, ntheta=360, 
     Rmin=5., Rmax=999999999, dr=40., 
-    input=None, save='atom_current_radial.txt', saveinput='ac_input.txt'):
+    input=None, save='atom_transmission_radial.txt', saveinput='ac_input.txt'):
     
     if E:
         Eidx = tbt.Eindex(E)
@@ -235,11 +235,11 @@ def atom_current_radial(tbt, elec, E, kavg=True, activity=True,
         r, t, ac = np.loadtxt(input, delimiter='\t', usecols=(1, 2, 3), unpack=True, skiprows=1)
     else:
         r, t = xyz2polar(tbt, origin=origin)
-        print('start extraction of atom_current...')
-        ac = tbt.atom_current(elec, E, kavg, activity)
-        print('...end extraction of atom_current')
+        print('start extraction of atom_transmission...')
+        ac = tbt.atom_transmission(E, elec, kavg, activity)
+        print('...end extraction of atom_transmission')
         f = open(saveinput, 'w')
-        f.write('ia\tr (Ang)\tangle (rad; center {})\tatom current\n'.format(origin))
+        f.write('ia\tr (Ang)\tangle (rad; center {})\tatom transmission\n'.format(origin))
         for ia, rr, tt, a in zip(np.arange(na), r, t, ac):
             f.write('{}\t{}\t{}\t{}\n'.format(ia, rr, tt, a))
         f.close()
@@ -337,7 +337,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
     Wmax = 100
     dH_CAP = si.Hamiltonian(geometry, dtype='complex128', dim=spin)
     CAP_list = []
-    ### EDGES
+    ### EDGES 
     if 'right' in side:
         print('Setting at right')
         z, y = geometry.xyz[:, xaxis], geometry.xyz[:, yaxis]
@@ -347,7 +347,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -362,7 +362,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -377,7 +377,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -392,7 +392,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -402,7 +402,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
     if write_xyz:
         # visualize CAP regions
         visualize = geometry.copy()
-        visualize.atom[CAP_list] = si.Atom(8, R=[1.44])
+        visualize.atoms[CAP_list] = si.Atom(8, R=[1.44])
         visualize.write('CAP.xyz')
 
     return dH_CAP
@@ -425,7 +425,7 @@ def read_fullTSHS(HSfilename, geomFDFfilename):
     HSfile.reduce()
     return HSfile
 
-def T_from_bc(tbt, elec, idx_1, idx_2, E=None, kavg=True, write_xyz=None):
+def T_from_bt(tbt, elec, idx_1, idx_2, E=None, kavg=True, write_xyz=None):
     if write_xyz:   # visualize regions
         visualize = tbt.geom.copy()
         visualize.atom[idx_1] = si.Atom(8, R=[1.44])
@@ -439,11 +439,11 @@ def T_from_bc(tbt, elec, idx_1, idx_2, E=None, kavg=True, write_xyz=None):
     T = np.zeros(len(energies))
     for ie,e in enumerate(energies):
         print('Doing E # {} of {}  ({} eV)'.format(ie+1, len(energies), e)) 
-        bc = tbt.bond_current(elec, e, kavg=kavg, only='all', uc=True)
+        bc = tbt.bond_transmission(e, elec, kavg=kavg, only='all', uc=True)
         T[ie] += bc[idx_1.reshape(-1, 1), idx_2.reshape(1, -1)].sum()
     return T
 
-def T_from_bc_from_orbital(tbt, elec, o_idx, idx_1, idx_2, E=None, 
+def T_from_bt_from_orbital(tbt, elec, o_idx, idx_1, idx_2, E=None, 
     kavg=True, write_xyz=None):
     if write_xyz:   # visualize regions
         visualize = tbt.geom.copy()
@@ -458,11 +458,11 @@ def T_from_bc_from_orbital(tbt, elec, o_idx, idx_1, idx_2, E=None,
     T = np.zeros(len(energies))
     for ie,e in enumerate(energies):
         print('Doing E # {} of {}  ({} eV)'.format(ie+1, len(energies), e)) 
-        Jij = tbt.orbital_current(elec, e, kavg=kavg)
+        Jij = tbt.orbital_transmission(e, elec, kavg=kavg)
         orbs_1 = tbt.geom.a2o(idx_1) + o_idx
         orbs_2 = tbt.geom.a2o(idx_2) + o_idx
         T[ie] = Jij[orbs_1.reshape(-1, 1), orbs_2.reshape(1, -1)].sum()
-        #bc = tbt.bond_current(elec, e, kavg=kavg, only='all', uc=True)
+        #bc = tbt.bond_transmission(e, elec, kavg=kavg, only='all', uc=True)
     return T
 
 def list2range_TBTblock(lst):
@@ -1590,8 +1590,8 @@ def plot_transmission_bulk(H, iE, ymin=None, ymax=None, style='-', color='k', la
 
     return ax, tr
 
-def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
-    """Read bond currents from tbtrans output
+def read_bond_transmission(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
+    """Read bond transmission from tbtrans output
 
     Parameters
     ----------
@@ -1600,18 +1600,18 @@ def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     idx_elec : int
         the electrode of originating electrons
     only : {'+', '-', 'all'}
-        If "+" is supplied only the positive orbital currents are used, for "-", 
-        only the negative orbital currents are used, else return the sum of both. 
+        If "+" is supplied only the positive orbital transmission are used, for "-", 
+        only the negative orbital transmission are used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
     k : bool, int or array_like
-        whether the returned bond current is k-averaged, 
+        whether the returned bond transmission is k-averaged, 
         an explicit k-point or a selection of k-points
 
     Returns
     -------
     bc, nc.E[idx_E], geom
-    bc : bond currents
+    bc : bond transmission
     nc.E[idx_E] : energy
     geom : geometry
 
@@ -1624,7 +1624,7 @@ def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     geom = nc.geom
 
     elec = nc.elecs[idx_elec]
-    print('Bond-currents from electrode: {}'.format(elec))
+    print('Bond-transmission from electrode: {}'.format(elec))
 
     # Check 'k' argument
     if k == 'avg':
@@ -1643,18 +1643,18 @@ def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
         exit(0)
 
     idx_E = nc.Eindex(E)
-    print('Extracting bond-currents at energy: {} eV'.format(nc.E[idx_E]))
-    bc = nc.bond_current(elec, kavg=avg, isc=[0,0,0], only=only, E=idx_E, uc=True)
+    print('Extracting bond-transmission at energy: {} eV'.format(nc.E[idx_E]))
+    bc = nc.bond_transmission(E=idx_E, elec=elec, kavg=avg, isc=[0,0,0], only=only, uc=True)
 
     return bc, nc.E[idx_E], geom
 
-    # bc_coo = nc.bond_current(elec, kavg=avg, isc=[0,0,0], only=only, E=idx_E, uc=True).tocoo()
+    # bc_coo = nc.bond_transmission(E=idx_E, elec=elec, kavg=avg, isc=[0,0,0], only=only, uc=True).tocoo()
     # i_list = bc_coo.row
     # j_list = bc_coo.col
     # bc_list = bc_coo.data
     # #for i, j, bc in zip(i_list, j_list, bc_list):
     # #    print('{}\t{}\t{}'.format(i, j, bc))
-    # print('Number of bond-current entries: {}'.format(np.shape(bc_list)))
+    # print('Number of bond-transmission entries: {}'.format(np.shape(bc_list)))
 
     # if atoms is not None:    
     #     i_list_new, j_list_new, bc_list_new = [], [], []
@@ -1667,7 +1667,7 @@ def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     #     j_list = np.array(j_list_new)
     #     bc_list = np.array(bc_list_new)
     
-    # #print('i\tj\tBond-current')
+    # #print('i\tj\tBond-transmission')
     # #for i, j, bc in zip(i_list, j_list, bc_list):
     # #    print('{}\t{}\t{}'.format(i, j, bc))
 
@@ -1676,15 +1676,15 @@ def read_bondcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
 
     # return (geom, i_list, j_list, bc_list, nc.E[idx_E])
 
-def bc_sub(bc, atoms):
+def bt_sub(bc, atoms):
     """
-    bc:     bondcurrents object directly from "read_bondcurrent"
+    bc:     bond_transmission object directly from "read_bond_transmission"
     atoms:  list of selected atoms
     """
     # Get data
     i_list, j_list, bc_list = bc.tocoo().row, bc.tocoo().col, bc.tocoo().data
     # Filter only selected atoms
-    print('Reading bond-currents among atoms (1-based!!!):')
+    print('Reading bond-transmission among atoms (1-based!!!):')
     print(list2range_TBTblock(atoms))  # print 0-based idx as 1-based idx
     i_list_new, j_list_new, bc_list_new = [], [], []
     for i, j, bc in zip(i_list, j_list, bc_list):
@@ -1718,11 +1718,11 @@ class Groupby:
 
         return result
 
-def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True, scale='raw', xyz_origin=None,
+def plot_bond_transmission(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True, scale='raw', xyz_origin=None,
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
     lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
     spsite=None, dpi=180, units='angstrom'):   
-    """ Read bond currents from tbtrans output and plot them 
+    """ Read bond transmission from tbtrans output and plot them 
     
     Parameters
     ----------
@@ -1731,19 +1731,19 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     idx_elec : int
         the electrode of originating electrons
     only : {'+', '-', 'all'}
-        If "+" is supplied only the positive orbital currents are used, for "-", 
-        only the negative orbital currents are used, else return the sum of both. 
+        If "+" is supplied only the positive orbital transmission are used, for "-", 
+        only the negative orbital transmission are used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
     k : bool, int or array_like
-        whether the returned bond current is k-averaged, 
+        whether the returned bond transmission is k-averaged, 
         an explicit k-point or a selection of k-points
     zaxis : int
         index of out-of plane direction
     avg :  bool
-        if "True", then it averages all currents coming from each atom and plots 
+        if "True", then it averages all transmission coming from each atom and plots 
         them in a homogeneous map
-        if "False" it plots ALL bond currents as lines originating from each atom
+        if "False" it plots ALL bond transmission as lines originating from each atom
     scale : {'%' or 'raw'}
         wheter values are percent. Change vmin and vmax accordingly between 0% and 100%
     vmin : float
@@ -1757,7 +1757,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     spsite : list of int
         special atoms in the lattice that you want to plot as red dots instead
     atoms : np.array or list
-        list of atoms for which reading and plotting bondcurrents
+        list of atoms for which reading and plotting bond_transmission
     out : string
         name of final png figure 
 
@@ -1767,7 +1767,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     Returns
     -------
     bc, nc.E[idx_E], geom
-    bc : bond currents
+    bc : bond transmission
     nc.E[idx_E] : energy
     geom : geometry
 
@@ -1777,18 +1777,18 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     - Be sure that atoms belong to a single plane (say, only graphene, no tip)
     """
     t = time.time()
-    print('\n***** BOND-CURRENTS (2D map) *****\n')    
+    print('\n***** BOND-transmission (2D map) *****\n')    
     nc = si.get_sile(f)
     elec = nc.elecs[idx_elec]
     
-    # Read bond currents from TBT.nc file
-    bc, energy, geom = read_bondcurrents(f, idx_elec, only, E, k)
+    # Read bond transmission from TBT.nc file
+    bc, energy, geom = read_bond_transmission(f, idx_elec, only, E, k)
 
     # If needed, select only selected atoms from bc_bg.
     bc_coo = bc.tocoo()
     i_list, j_list, bc_list = bc_coo.row, bc_coo.col, bc_coo.data
     if atoms is None:
-        print('Reading bond-currents among all atoms in device region')
+        print('Reading bond-transmission among all atoms in device region')
         atoms = nc.a_dev
         del bc_coo
     else:
@@ -1798,10 +1798,10 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
         i_list, j_list, bc_list = i_list[select], j_list[select], bc_list[select]
         del bc_coo, select
 
-    print('Number of bond-current entries: {}'.format(np.shape(bc_list)))
+    print('Number of bond-transmission entries: {}'.format(np.shape(bc_list)))
     print('MIN bc among selected atoms (from file) = {}'.format(np.min(bc_list)))
     print('MAX bc among selected atoms (from file) = {}'.format(np.max(bc_list)))
-    #print('i\tj\tBond-current')
+    #print('i\tj\tBond-transmission')
     #for i, j, bc in zip(i_list, j_list, bc_list):
     #    print('{}\t{}\t{}'.format(i, j, bc))
 
@@ -1812,7 +1812,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     cmap = cm.viridis
 
     if out is None:
-        figname = 'BondCurrents_{}_E{}.png'.format(elec, energy)
+        figname = 'bond_transmission_{}_E{}.png'.format(elec, energy)
     else:
         figname = '{}_{}_E{}.png'.format(out, elec, energy)
 
@@ -1833,7 +1833,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
         xaxis, yaxis = 0, 2
 
     if avg:
-        # Plot bond currents as avg 2D map
+        # Plot bond transmission as avg 2D map
         atoms_sort = np.sort(atoms)
         bc_avg = bc.sum(1).A.ravel()[atoms_sort]
 
@@ -1876,7 +1876,7 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
             vmin = np.min(bc_list) 
         if vmax is None:
             vmax = np.max(bc_list)
-        # Plot bond currents as half-segments
+        # Plot bond transmission as half-segments
         start_list = zip(geom.xyz[i_list, xaxis], geom.xyz[i_list, yaxis])
         half_end_list = zip(.5*(geom.xyz[i_list, xaxis]+geom.xyz[j_list, xaxis]), 
             .5*(geom.xyz[i_list, yaxis]+geom.xyz[j_list, yaxis]))
@@ -1941,25 +1941,25 @@ def plot_bondcurrents(f, idx_elec, only='+', E=0.0,  k='avg', zaxis=2, avg=True,
     return bc_list, vmin, vmax, i_list, j_list
 
 
-def plot_bondcurrents_old(f, idx_elec, sum='+', E=0.0,  k='avg', f_bg=None, percent_bg=False, 
+def plot_bond_transmission_old(f, idx_elec, sum='+', E=0.0,  k='avg', f_bg=None, percent_bg=False, 
     vmin=None, vmax=None, lw=5, log=False, adosmap=False, ADOSmin=None, ADOSmax=None, arrows=False, 
     lattice=False, ps=20, ados=False, atoms=None, out=None, ymin=None, ymax=None, dpi=180):   
     """ 
     atoms must be 0-based
     """
     t = time.time()
-    print('\n***** BOND-CURRENTS (2D map) *****\n')    
+    print('\n***** BOND-transmission (2D map) *****\n')    
     nc = si.get_sile(f)
     elec = nc.elecs[idx_elec]
     
-    # Read bond currents from TBT.nc file
-    bc, energy, geom = read_bondcurrents(f, idx_elec, sum, E, k)
+    # Read bond transmission from TBT.nc file
+    bc, energy, geom = read_bond_transmission(f, idx_elec, sum, E, k)
 
     # Read and subtract extra bc, if necessary
     if f_bg:
         #geom must be the same!!!
-        print('\n - Subtracting bondcurrents from {}'.format(f_bg))
-        bc_bg = read_bondcurrents(f_bg, idx_elec, sum, E, k)[0]
+        print('\n - Subtracting bond_transmission from {}'.format(f_bg))
+        bc_bg = read_bond_transmission(f_bg, idx_elec, sum, E, k)[0]
         if percent_bg:
             # If needed, select only selected atoms from bc_bg.
             # Then get max bc value to be used later
@@ -1969,26 +1969,26 @@ def plot_bondcurrents_old(f, idx_elec, sum='+', E=0.0,  k='avg', f_bg=None, perc
                 if atoms[0] < 0:
                     # if atoms is a list of negative numbers, use all atoms except them
                     atoms = list(set(nc.a_dev).difference(set(-np.asarray(atoms))))
-                newbc_bg = bc_sub(bc_bg, atoms)[2]
+                newbc_bg = bt_sub(bc_bg, atoms)[2]
             max_newbc_bg = np.amax(newbc_bg)
         bc -= bc_bg
         bc.eliminate_zeros()
 
     # If needed, select only selected atoms from bc_bg.
     if atoms is None:
-        print('Reading bond-currents among all atoms in device region')
+        print('Reading bond-transmission among all atoms in device region')
         atoms = nc.a_dev
         i_list, j_list, bc_list = bc.tocoo().row, bc.tocoo().col, bc.tocoo().data
     else:
         if atoms[0] < 0:
             # if atoms is a list of negative numbers, use all atoms except them
             atoms = list(set(nc.a_dev).difference(set(-np.asarray(atoms))))
-        i_list, j_list, bc_list = bc_sub(bc, atoms)
+        i_list, j_list, bc_list = bt_sub(bc, atoms)
 
-    print('Number of bond-current entries: {}'.format(np.shape(bc_list)))
+    print('Number of bond-transmission entries: {}'.format(np.shape(bc_list)))
     print('MIN bc among selected atoms (from file) = {}'.format(np.min(bc_list)))
     print('MAX bc among selected atoms (from file) = {}'.format(np.max(bc_list)))
-    #print('i\tj\tBond-current')
+    #print('i\tj\tBond-transmission')
     #for i, j, bc in zip(i_list, j_list, bc_list):
     #    print('{}\t{}\t{}'.format(i, j, bc))
 
@@ -2000,14 +2000,14 @@ def plot_bondcurrents_old(f, idx_elec, sum='+', E=0.0,  k='avg', f_bg=None, perc
     cmap = cm.viridis
 
     if out is None:
-        figname = 'BondCurrents_{}_E{}.png'.format(elec, energy)
+        figname = 'bond_transmission_{}_E{}.png'.format(elec, energy)
     else:
         figname = '{}_{}_E{}.png'.format(out, elec, energy)
 
     fig, ax = plt.subplots()
     ax.set_aspect('equal')
 
-    # Plot bond currents as half segments starting from the atoms
+    # Plot bond transmission as half segments starting from the atoms
     start_list = zip(geom.xyz[i_list, 0], geom.xyz[i_list, 1])
     half_end_list = zip(.5*(geom.xyz[i_list, 0]+geom.xyz[j_list, 0]), 
         .5*(geom.xyz[i_list, 1]+geom.xyz[j_list, 1]))
@@ -2047,7 +2047,7 @@ def plot_bondcurrents_old(f, idx_elec, sum='+', E=0.0,  k='avg', f_bg=None, perc
             image.set_clim(ADOSmin, ADOSmax)
             image.set_array(ADOS)
 
-        # Plot bond-currents        
+        # Plot bond-transmission        
         if arrows:  # NOT WORKING
             lattice_bonds = ax.quiver(np.array(start_list[0]), np.array(start_list[1]), 
                 np.subtract(np.array(half_end_list[0]), np.array(start_list[0])), 
@@ -2170,7 +2170,7 @@ def read_ADOS(f, idx_elec, E=0.0, k='avg', atoms=None, sum=True):
 
     idx_E = nc.Eindex(E)
     print('Extracting ADOS at energy: {} eV'.format(nc.E[idx_E]))
-    ADOS_list = nc.ADOS(elec=elec, E=idx_E, kavg=0, atom=atoms, sum=sum).T
+    ADOS_list = nc.ADOS(elec=elec, E=idx_E, kavg=0, atoms=atoms, sum=sum).T
     print('Shape of ADOS: {}'.format(np.shape(ADOS_list)))
     
     if atoms is None:
@@ -2345,7 +2345,7 @@ def plot_ADOS(f, idx_elec, E=0.0, k='avg', sum=False, vmin=None, vmax=None, log=
     if log:
         ADOS = np.log(ADOS+1)
 
-    if scale is '%':
+    if scale == '%':
         if vmin is None:
             vmin = np.amin(ADOS)*100/np.amax(ADOS) 
         if vmax is None:
@@ -2578,11 +2578,11 @@ def plot_ADOS_x(f, idx_elec, E=0.0, k='avg', vmin=None, vmax=None, log=False):
 
 
 
-def plot_bc_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
+def plot_bond_transmission_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
     zaxis=2, scale='raw', xyz_origin=None, vmin=None, vmax=None, lw=5, lattice=False, 
     ps=20, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
     spsite=None, dpi=180, units='angstrom'):   
-    """ Read bond currents from tbtrans output and plot them 
+    """ Read bond transmission from tbtrans output and plot them 
     
     Parameters
     ----------
@@ -2593,12 +2593,12 @@ def plot_bc_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     idx_elec : int
         the electrode of originating electrons
     only : {'+', '-', 'all'}
-        If "+" is supplied only the positive orbital currents are used, for "-", 
-        only the negative orbital currents are used, else return the sum of both. 
+        If "+" is supplied only the positive orbital transmission are used, for "-", 
+        only the negative orbital transmission are used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
     k : bool, int or array_like
-        whether the returned bond current is k-averaged, 
+        whether the returned bond transmission is k-averaged, 
         an explicit k-point or a selection of k-points
     zaxis : int
         index of out-of plane direction
@@ -2615,7 +2615,7 @@ def plot_bc_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     spsite : list of int
         special atoms in the lattice that you want to plot as red dots instead
     atoms : np.array or list
-        list of atoms for which reading and plotting bondcurrents
+        list of atoms for which reading and plotting bond_transmission
     out : string
         name of final png figure 
 
@@ -2627,19 +2627,19 @@ def plot_bc_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     - Be sure that atoms belong to a single plane (say, only graphene, no tip)
     """
     t = time.time()
-    print('\n***** BOND CURRENT spin UP + spin DOWN (2D map) *****\n')    
+    print('\n***** BOND transmission spin UP + spin DOWN (2D map) *****\n')    
     nc_UP = si.get_sile(f_UP)
     nc_DN = si.get_sile(f_DN)
     elec = nc_UP.elecs[idx_elec]
 
-    # Read bond currents from TBT_UP.nc and TBT_DN.nc file
-    bc_UP, energy, geom = read_bondcurrents(f_UP, idx_elec, only, E, k)
+    # Read bond transmission from TBT_UP.nc and TBT_DN.nc file
+    bc_UP, energy, geom = read_bond_transmission(f_UP, idx_elec, only, E, k)
     print('DONE reading UP... (ETA = {} s)'.format(time.time()-t))
-    bc_DN, _, _ = read_bondcurrents(f_DN, idx_elec, only, E, k)
+    bc_DN, _, _ = read_bond_transmission(f_DN, idx_elec, only, E, k)
     print('DONE reading DN... (ETA = {} s)'.format(time.time()-t))
 
     if atoms is None:
-        print('Reading vector-currents among all atoms in device region')
+        print('Reading vector-transmission among all atoms in device region')
         atoms = nc_UP.a_dev
         #del bc_coo
     else:
@@ -2655,7 +2655,7 @@ def plot_bc_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     print('bc (MIN, MAX) = ({}, {})'.format(np.amin(bc_sum), np.amax(bc_sum)))
 
     ####
-    # Plot bond currents as avg 2D map
+    # Plot bond transmission as avg 2D map
     import matplotlib.collections as collections
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     cmap = cm.viridis
@@ -2751,8 +2751,8 @@ def plot_bc_UPplusDOWN(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
 
 
 
-def read_vectorcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
-    """Read vector currents from tbtrans output
+def read_vector_transmission(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
+    """Read vector transmission from tbtrans output
 
     Parameters
     ----------
@@ -2761,18 +2761,18 @@ def read_vectorcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     idx_elec : int
         the electrode of originating electrons
     only : {''+', '-', 'all'}
-        If "+" is supplied only the positive orbital currents are used, for "-", 
-        only the negative orbital currents are used, else return the sum of both. 
+        If "+" is supplied only the positive orbital transmission are used, for "-", 
+        only the negative orbital transmission are used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
     k : bool, int or array_like
-        whether the returned bond current is k-averaged, 
+        whether the returned bond transmission is k-averaged, 
         an explicit k-point or a selection of k-points
 
     Returns
     -------
     vc, nc.E[idx_E], geom
-    vc : vector currents
+    vc : vector transmission
     nc.E[idx_E] : energy
     geom : geometry
 
@@ -2786,7 +2786,7 @@ def read_vectorcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
     geom = nc.geom
 
     elec = nc.elecs[idx_elec]
-    print('Vector-currents from electrode: {}'.format(elec))
+    print('Vector-transmission from electrode: {}'.format(elec))
 
     # Check 'k' argument
     if k == 'avg':
@@ -2805,8 +2805,8 @@ def read_vectorcurrents(f, idx_elec, only='+', E=0.0, k='avg'):#, atoms=None):
         exit(0)
 
     idx_E = nc.Eindex(E)
-    print('Extracting vector-currents at energy: {} eV'.format(nc.E[idx_E]))
-    vc = nc.vector_current(elec, kavg=avg, only=only, E=idx_E)
+    print('Extracting vector-transmission at energy: {} eV'.format(nc.E[idx_E]))
+    vc = nc.vector_transmission(E=idx_E, elec=elec, kavg=avg, only=only)
 
     return vc, nc.E[idx_E], geom
 
@@ -2861,11 +2861,11 @@ def shiftedColorMap(cmap, start=0, midpoint=0.5, stop=1.0, name='shiftedcmap'):
 
     return newcmap
 
-def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
+def plot_spin_local_transmission(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
     zaxis=2, scale='raw', xyz_origin=None, vmin=None, vmax=None, lw=5, lattice=False, 
     ps=20, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
     spsite=None, dpi=180, units='angstrom'):   
-    """ Read bond currents from tbtrans output and plot them 
+    """ Read bond transmission from tbtrans output and plot them 
     
     Parameters
     ----------
@@ -2876,12 +2876,12 @@ def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     idx_elec : int
         the electrode of originating electrons
     only : {'+', '-', 'all'}
-        If "+" is supplied only the positive orbital currents are used, for "-", 
-        only the negative orbital currents are used, else return the sum of both. 
+        If "+" is supplied only the positive orbital transmission are used, for "-", 
+        only the negative orbital transmission are used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
     k : bool, int or array_like
-        whether the returned bond current is k-averaged, 
+        whether the returned bond transmission is k-averaged, 
         an explicit k-point or a selection of k-points
     zaxis : int
         index of out-of plane direction
@@ -2898,7 +2898,7 @@ def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     spsite : list of int
         special atoms in the lattice that you want to plot as red dots instead
     atoms : np.array or list
-        list of atoms for which reading and plotting bondcurrents
+        list of atoms for which reading and plotting bond_transmission
     out : string
         name of final png figure 
 
@@ -2910,21 +2910,21 @@ def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     - Be sure that atoms belong to a single plane (say, only graphene, no tip)
     """
     t = time.time()
-    print('\n***** SPIN LOCAL CURRENT (2D map) *****\n')    
+    print('\n***** SPIN LOCAL transmission (2D map) *****\n')    
     nc_UP = si.get_sile(f_UP)
     nc_DN = si.get_sile(f_DN)
     elec = nc_UP.elecs[idx_elec]
 
-    # Read vector currents from TBT_UP.nc file
-    vc_UP, energy, geom = read_vectorcurrents(f_UP, idx_elec, only, E, k)
-    # Read vector currents from TBT_DN.nc file
-    vc_DN, _, _ = read_vectorcurrents(f_DN, idx_elec, only, E, k)
+    # Read vector transmission from TBT_UP.nc file
+    vc_UP, energy, geom = read_vector_transmission(f_UP, idx_elec, only, E, k)
+    # Read vector transmission from TBT_DN.nc file
+    vc_DN, _, _ = read_vector_transmission(f_DN, idx_elec, only, E, k)
 
     # If needed, select only selected atoms
     #bc_coo = bc.tocoo()
     #i_list, j_list, bc_list = bc_coo.row, bc_coo.col, bc_coo.data
     if atoms is None:
-        print('Reading vector-currents among all atoms in device region')
+        print('Reading vector-transmission among all atoms in device region')
         atoms = nc_UP.a_dev
         #del bc_coo
     else:
@@ -2962,7 +2962,7 @@ def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     elif zaxis == 1:
         xaxis, yaxis = 0, 2
 
-    # Plot magnitude of vector currents from BC as 2D map
+    # Plot magnitude of vector transmission from BC as 2D map
     atoms_sort = np.sort(atoms)
     Js_sorted = Js[atoms_sort]
 
@@ -2994,7 +2994,7 @@ def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
             vmin = -maxmax # -max_vc_DN 
         if vmax is None:
             vmax = maxmax # max_vc_UP 
-        # Get max of spin down and spin up currents 
+        # Get max of spin down and spin up local transmission 
 
     coords = np.column_stack((x, y))
 
@@ -3045,11 +3045,11 @@ def plot_spin_local_current(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg',
     print('Done in {} sec'.format(time.time() - t))
 
 
-def plot_spin_local_current_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
+def plot_spin_local_transmission_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg', 
     zaxis=2, scale='raw', xyz_origin=None, vmin=None, vmax=None, lw=5, lattice=False, 
     ps=20, atoms=None, out=None, ymin=None, ymax=None, xmin=None, xmax=None, 
     spsite=None, dpi=180, units='angstrom'):   
-    """ Read bond currents from tbtrans output and plot them 
+    """ Read bond transmission from tbtrans output and plot 
     
     Parameters
     ----------
@@ -3060,12 +3060,12 @@ def plot_spin_local_current_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg
     idx_elec : int
         the electrode of originating electrons
     only : {'+', '-', 'all'}
-        If "+" is supplied only the positive orbital currents are used, for "-", 
-        only the negative orbital currents are used, else return the sum of both. 
+        If "+" is supplied only the positive orbital transmission is used, for "-", 
+        only the negative orbital transmission is used, else return the sum of both. 
     E : float or int, 
         A float for energy in eV, int for explicit energy index 
     k : bool, int or array_like
-        whether the returned bond current is k-averaged, 
+        whether the returned bond transmission is k-averaged, 
         an explicit k-point or a selection of k-points
     zaxis : int
         index of out-of plane direction
@@ -3082,7 +3082,7 @@ def plot_spin_local_current_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg
     spsite : list of int
         special atoms in the lattice that you want to plot as red dots instead
     atoms : np.array or list
-        list of atoms for which reading and plotting bondcurrents
+        list of atoms for which reading and plotting bond transmission
     out : string
         name of final png figure 
 
@@ -3094,21 +3094,21 @@ def plot_spin_local_current_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg
     - Be sure that atoms belong to a single plane (say, only graphene, no tip)
     """
     t = time.time()
-    print('\n***** SPIN LOCAL CURRENT (2D map) *****\n')    
+    print('\n***** SPIN LOCAL transmission (2D map) *****\n')    
     nc_UP = si.get_sile(f_UP)
     nc_DN = si.get_sile(f_DN)
     elec = nc_UP.elecs[idx_elec]
 
-    # Read vector currents from TBT_UP.nc file
-    vc_UP, energy, geom = read_vectorcurrents(f_UP, idx_elec, only, E, k)
-    # Read vector currents from TBT_DN.nc file
-    vc_DN, _, _ = read_vectorcurrents(f_DN, idx_elec, only, E, k)
+    # Read vector transmission from TBT_UP.nc file
+    vc_UP, energy, geom = read_vector_transmission(f_UP, idx_elec, only, E, k)
+    # Read vector transmission from TBT_DN.nc file
+    vc_DN, _, _ = read_vector_transmission(f_DN, idx_elec, only, E, k)
 
     # If needed, select only selected atoms
     #bc_coo = bc.tocoo()
     #i_list, j_list, bc_list = bc_coo.row, bc_coo.col, bc_coo.data
     if atoms is None:
-        print('Reading vector-currents among all atoms in device region')
+        print('Reading vector-transmission among all atoms in device region')
         atoms = nc_UP.a_dev
         #del bc_coo
     else:
@@ -3146,7 +3146,7 @@ def plot_spin_local_current_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg
     elif zaxis == 1:
         xaxis, yaxis = 0, 2
 
-    # Plot magnitude of vector currents from BC as 2D map
+    # Plot magnitude of vector transmission from BC as 2D map
     atoms_sort = np.sort(atoms)
     Js_sorted = Js[atoms_sort]
 
@@ -3174,7 +3174,7 @@ def plot_spin_local_current_2cbar(f_UP, f_DN, idx_elec, only='+', E=0.0,  k='avg
         vmax = vmax*maxmax #vmax*max_vc_UP
         vmin = -vmin*maxmax #-vmin*max_vc_DN
     else:
-        # Get max of spin down and spin up currents 
+        # Get max of spin down and spin up transmission 
         vmax = maxmax # max_vc_UP 
         vmin = -maxmax # -max_vc_DN 
 
