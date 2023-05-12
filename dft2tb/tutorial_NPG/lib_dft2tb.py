@@ -138,7 +138,6 @@ def makearea(TSHS, shape='Cuboid', z_area=None, ext_offset=None, center=None,
         v = TSHS.geom.copy(); v.atom[a_Delta] = si.Atom(8, R=[1.43]); v.write('a_Delta.xyz')
         return a_Delta, a_int, Delta, area_ext, area_R2
 
-
 def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
     # Determine orientation
     if zaxis == 2:
@@ -156,7 +155,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
     Wmax = 100
     dH_CAP = si.Hamiltonian(geometry, dtype='complex128', dim=spin)
     CAP_list = []
-    ### EDGES
+    ### EDGES 
     if 'right' in side:
         print('Setting at right')
         z, y = geometry.xyz[:, xaxis], geometry.xyz[:, yaxis]
@@ -166,7 +165,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -181,7 +180,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ((dz_CAP/(z2-2*z1+z[idx]))**2 + (dz_CAP/(z2-z[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -196,7 +195,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -211,7 +210,7 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
         fz = (4/(c**2)) * ( (dz_CAP/(y2-2*y1+y[idx]))**2 + (dz_CAP/(y2-y[idx]))**2 - 2 )
         Wz = ((hbar**2)/(2*m)) * (2*np.pi/(dz_CAP/2000))**2 * fz
         for ii,wz in zip(idx, Wz):
-            orbs = dH_CAP.geom.a2o(ii, all=True) 
+            orbs = dH_CAP.geometry.a2o(ii, all=True) 
             for orb in orbs:
                 dH_CAP[orb, orb] = complex(0, -wz)
         CAP_list.append(idx)
@@ -221,11 +220,10 @@ def CAP(geometry, side, dz_CAP=30, write_xyz=True, zaxis=2, spin=1):
     if write_xyz:
         # visualize CAP regions
         visualize = geometry.copy()
-        visualize.atom[CAP_list] = si.Atom(8, R=[1.44])
+        visualize.atoms[CAP_list] = si.Atom(8, R=[1.44])
         visualize.write('CAP.xyz')
 
     return dH_CAP
-
 
 def dagger(M):
     return np.conjugate(np.transpose(M))
